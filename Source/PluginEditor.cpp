@@ -18,7 +18,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         sliders[i] = std::make_unique<juce::Slider>();
         auto& slider = *sliders[i];
         slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 115, 25);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 20);
         slider.setColour(juce::Slider::rotarySliderFillColourId, accent);
         slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff354555));
         slider.setColour(juce::Slider::thumbColourId, text);
@@ -34,7 +34,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         labels[i]->setText(names[i], juce::dontSendNotification);
         labels[i]->setJustificationType(juce::Justification::centred);
         labels[i]->setColour(juce::Label::textColourId, faint);
-        labels[i]->setFont(juce::Font(juce::FontOptions(13.0f).withStyle("bold")));
+        labels[i]->setFont(juce::Font(juce::FontOptions(11.0f).withStyle("bold")));
         addAndMakeVisible(*labels[i]);
         attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, ids[i], slider);
     }
@@ -54,7 +54,9 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     };
     addAndMakeVisible(presets);
     gainHistory.fill(0.0f);
-    setSize(900, 1090);
+    // Fixed compact editor: never resize host-owned VST3 windows interactively.
+    setResizable(false, false);
+    setSize(1080, 600);
     startTimerHz(10);
 }
 
@@ -71,7 +73,7 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedActive = processor.getRiderActive();
     gainHistory[(size_t)historyPosition] = displayedRideDb;
     historyPosition = (historyPosition + 1) % (int)gainHistory.size();
-    repaint(juce::Rectangle<int>(18, 60, getWidth()-36, 300));
+    repaint(juce::Rectangle<int>(18, 56, getWidth()-36, 218));
 }
 
 void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
@@ -111,36 +113,39 @@ void SmoothRideAudioProcessorEditor::drawMeter(juce::Graphics& g, juce::Rectangl
 
 void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillAll(bg);
-    auto top = juce::Rectangle<float>(20, 13, (float)getWidth()-40, 44);
+    constexpr int margin = 18;
+    const int right = getWidth() - margin;
+    const int innerWidth = getWidth() - 2 * margin;
+
     g.setColour(text);
-    g.setFont(juce::Font(juce::FontOptions(28.0f).withStyle("bold")));
-    g.drawText("SMOOTHRIDE", top.removeFromLeft(240).toNearestInt(), juce::Justification::centredLeft);
+    g.setFont(juce::Font(juce::FontOptions(24.0f).withStyle("bold")));
+    g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
-    g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText("v0.3.2  |  STEREO-LINKED GAIN RIDER", top.toNearestInt(), juce::Justification::centredRight);
-
-    const auto meterArea = juce::Rectangle<float>(20, 67, (float)getWidth()-40, 90);
-    g.setColour(panel);
-    g.fillRoundedRectangle(meterArea, 10.0f);
-    drawMeter(g, {35.f, 80.f, 325.f, 55.f}, displayedInputDb, "INPUT PEAK");
-    drawMeter(g, {380.f, 80.f, 325.f, 55.f}, displayedOutputDb, "OUTPUT PEAK");
-    g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("PEAK REDUCTION", 730, 83, 145, 20, juce::Justification::centred);
+    g.drawText("v0.3.3  |  STEREO-LINKED GAIN RIDER", 320, 10, right-320, 30, juce::Justification::centredRight);
+
+    // Wide, single-row peak meters: all coordinates stay inside 1080 x 600.
+    g.setColour(panel);
+    g.fillRoundedRectangle(juce::Rectangle<float>((float)margin, 49.f, (float)innerWidth, 63.f), 8.f);
+    drawMeter(g, {31.f, 55.f, 405.f, 49.f}, displayedInputDb, "INPUT PEAK");
+    drawMeter(g, {451.f, 55.f, 405.f, 49.f}, displayedOutputDb, "OUTPUT PEAK");
+    g.setColour(faint);
+    g.setFont(juce::Font(juce::FontOptions(11.0f)));
+    g.drawText("LIMITER", 865, 56, 180, 20, juce::Justification::centred);
     g.setColour(text);
-    g.setFont(juce::Font(juce::FontOptions(18.0f).withStyle("bold")));
-    g.drawText(juce::String(-displayedPeakReductionDb, 1) + " dB", 730, 105, 145, 30, juce::Justification::centred);
+    g.setFont(juce::Font(juce::FontOptions(17.0f).withStyle("bold")));
+    g.drawText(juce::String(-displayedPeakReductionDb, 1) + " dB", 865, 77, 180, 25, juce::Justification::centred);
 
-    auto chart = juce::Rectangle<float>(20, 169, (float)getWidth()-40, 100);
+    const auto chart = juce::Rectangle<float>((float)margin, 120.f, (float)innerWidth, 72.f);
     g.setColour(panel);
-    g.fillRoundedRectangle(chart, 10.0f);
+    g.fillRoundedRectangle(chart, 8.f);
     g.setColour(faint);
-    g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("GAIN RIDING HISTORY  |  LAST 24 s", 35, 172, 330, 20, juce::Justification::centredLeft);
+    g.setFont(juce::Font(juce::FontOptions(11.0f)));
+    g.drawText("GAIN RIDING HISTORY  |  24 s", 31, 123, 350, 17, juce::Justification::centredLeft);
     g.setColour(accent);
     g.drawText((displayedRideDb >= 0.f ? "+" : "") + juce::String(displayedRideDb, 1) + " dB",
-               getWidth()-167, 172, 135, 20, juce::Justification::centredRight);
-    const auto plot = chart.reduced(19.f, 26.f).withTrimmedTop(4.f);
+               right-148, 123, 132, 17, juce::Justification::centredRight);
+    const auto plot = juce::Rectangle<float>(34.f, 144.f, (float)getWidth()-68.f, 40.f);
     g.setColour(juce::Colour(0xff516272));
     g.drawHorizontalLine((int)plot.getCentreY(), plot.getX(), plot.getRight());
     juce::Path path;
@@ -153,59 +158,53 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(accent);
     g.strokePath(path, juce::PathStrokeType(2.0f));
 
-    // Pure telemetry strip: no audio parameters or processing modified.
-    const float diagnosticsY = 282.0f;
+    // Diagnostics are read-only. Never alter DSP state in the editor.
     g.setColour(panel);
-    g.fillRoundedRectangle(20.0f, diagnosticsY, (float)getWidth()-40.0f, 76.0f, 10.0f);
-    const float columnWidth = ((float)getWidth()-70.0f)/3.0f;
+    g.fillRoundedRectangle(juce::Rectangle<float>((float)margin, 200.f, (float)innerWidth, 65.f), 8.f);
+    const int columnWidth = (innerWidth - 30) / 3;
     const auto drawDiagnostic = [&](int col, const juce::String& label,
                                      const juce::String& value, juce::Colour valueColour) {
-        const int x = 35 + (int)((float)col*(columnWidth+5.0f));
+        const int x = 32 + col * (columnWidth + 10);
         g.setColour(faint);
-        g.setFont(juce::Font(juce::FontOptions(12.0f)));
-        g.drawText(label, x, 292, (int)columnWidth, 20, juce::Justification::centredLeft);
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
+        g.drawText(label, x, 205, columnWidth, 17, juce::Justification::centredLeft);
         g.setColour(valueColour);
-        g.setFont(juce::Font(juce::FontOptions(19.0f).withStyle("bold")));
-        g.drawText(value, x, 318, (int)columnWidth, 28, juce::Justification::centredLeft);
+        g.setFont(juce::Font(juce::FontOptions(16.0f).withStyle("bold")));
+        g.drawText(value, x, 227, columnWidth, 27, juce::Justification::centredLeft);
     };
-    drawDiagnostic(0, "DETECTOR / BLOCK RMS", juce::String(displayedRmsDb, 1) + " / " + juce::String(displayedBlockRmsDb, 1) + " dBFS", text);
-    drawDiagnostic(1, "REQUESTED RIDE", (displayedRequestedDb >= 0.0f ? "+" : "")
+    drawDiagnostic(0, "DETECTOR / BLOCK RMS", juce::String(displayedRmsDb, 1) + " / "
+                   + juce::String(displayedBlockRmsDb, 1) + " dBFS", text);
+    drawDiagnostic(1, "REQUESTED RIDE", (displayedRequestedDb >= 0.f ? "+" : "")
                    + juce::String(displayedRequestedDb, 1) + " dB", text);
-    const auto* floorParam = processor.apvts.getRawParameterValue("floor");
-    const bool belowFloor = !displayedActive;
     const auto* boostParam = processor.apvts.getRawParameterValue("range");
     const auto* cutParam = processor.apvts.getRawParameterValue("maxCut");
-    const float boost = boostParam != nullptr ? boostParam->load() : 6.0f;
-    const float cut = cutParam != nullptr ? cutParam->load() : 3.0f;
-    const juce::String riderStatus = belowFloor ? "BELOW FLOOR"
-       : displayedRequestedDb >= boost - 0.05f && boost > 0.0f ? "MAX BOOST"
-       : displayedRequestedDb <= -cut + 0.05f && cut > 0.0f ? "MAX CUT"
-       : "ACTIVE";
-    juce::ignoreUnused(floorParam);
-    drawDiagnostic(2, "RIDER STATUS", riderStatus,
-                   belowFloor ? faint : accent);
+    const float boost = boostParam != nullptr ? boostParam->load() : 6.f;
+    const float cut = cutParam != nullptr ? cutParam->load() : 3.f;
+    const juce::String status = !displayedActive ? "BELOW FLOOR"
+        : displayedRequestedDb >= boost-0.05f && boost>0.f ? "MAX BOOST"
+        : displayedRequestedDb <= -cut+0.05f && cut>0.f ? "MAX CUT" : "ACTIVE";
+    drawDiagnostic(2, "RIDER STATUS", status, displayedActive ? accent : faint);
 
-    const int cardX = 20, cardY = 375, cardGap = 10, cardW = (getWidth()-40-2*cardGap)/3, cardH = 140;
+    // Four columns instead of three, keeping the whole editor short.
+    constexpr int cols = 4, cardY = 274, cardGap = 8, cardH = 87;
+    const int cardW = (innerWidth - (cols-1)*cardGap) / cols;
     for (int i=0; i<numControls; ++i) {
-        const int x = cardX + (i%3)*(cardW+cardGap);
-        const int y = cardY + (i/3)*(cardH+cardGap);
+        const int x = margin + (i%cols)*(cardW+cardGap);
+        const int y = cardY + (i/cols)*(cardH+cardGap);
         g.setColour(panel);
-        g.fillRoundedRectangle((float)x, (float)y, (float)cardW, (float)cardH, 9.f);
+        g.fillRoundedRectangle((float)x, (float)y, (float)cardW, (float)cardH, 8.f);
     }
-    g.setColour(faint);
-    g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("Presets change the eleven controls above. Current values are saved by the host.",
-               20, 1053, getWidth()-40, 22, juce::Justification::centred);
 }
 
 void SmoothRideAudioProcessorEditor::resized() {
-    const int cardX = 20, cardY = 375, cardGap = 10, cardW = (getWidth()-40-2*cardGap)/3, cardH = 140;
+    constexpr int cols = 4, cardY = 274, cardGap = 8, cardH = 87;
+    const int cardW = (getWidth()-36-(cols-1)*cardGap)/cols;
     for (int i=0; i<numControls; ++i) {
-        const int x = cardX + (i%3)*(cardW+cardGap);
-        const int y = cardY + (i/3)*(cardH+cardGap);
-        labels[(size_t)i]->setBounds(x+10, y+5, cardW-20, 22);
-        sliders[(size_t)i]->setBounds(x+20, y+26, cardW-40, cardH-30);
+        const int x = 18+(i%cols)*(cardW+cardGap);
+        const int y = cardY+(i/cols)*(cardH+cardGap);
+        labels[(size_t)i]->setBounds(x+6, y+3, cardW-12, 17);
+        sliders[(size_t)i]->setBounds(x+8, y+19, cardW-16, cardH-22);
     }
-    presetLabel.setBounds(28, 1017, 205, 23);
-    presets.setBounds(235, 1009, getWidth()-263, 34);
+    presetLabel.setBounds(24, 566, 200, 24);
+    presets.setBounds(224, 565, getWidth()-245, 28);
 }

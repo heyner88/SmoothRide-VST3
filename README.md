@@ -36,3 +36,6 @@ The code has not been compiled with JUCE here; the standalone DSP regression tes
 
 
 See README-v0.3.2.md for changes and compatibility.
+
+
+See README-v0.3.3.md for compact editor changes.
