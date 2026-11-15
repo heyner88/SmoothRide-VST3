@@ -97,6 +97,7 @@ private:
     std::atomic<std::uint64_t> dspSpikeCount {0};
     std::atomic<unsigned int> dspResetRevision {0};
     unsigned int lastDSPResetRevision = 0;
+    bool lastGuardState = false, guardStateInitialized = false;
 
     std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f}, inputBlockRms {0.0f};
     std::atomic<float> rideDb {0.0f}, limiterReductionDb {0.0f};

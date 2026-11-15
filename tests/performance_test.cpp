@@ -49,5 +49,22 @@ int main() {
     t.reset(); published.publish(t);
     const auto cleared = published.read();
     assert(cleared.spikes == 0 && cleared.peak == 0 && cleared.lastSpikePercent == 0);
+    // Dedicated guard-toggle timing must be recorded without changing spike semantics.
+    t.reset();
+    t.record(0.0002, 480, 48000, 3000, 10.0, false, 0.00009);
+    assert(t.guardToggles() == 0);
+    t.record(0.0015, 480, 48000, 3001, 10.0, true, 0.0003);
+    assert(t.guardToggles() == 1 && t.spikes() == 1);
+    assert(std::abs(t.lastTogglePercent() - 15.f) < 0.0001f);
+    assert(std::abs(t.lastToggleRiderPercent() - 3.f) < 0.0001f);
+    published.publish(t);
+    const auto toggleSnapshot = published.read();
+    assert(toggleSnapshot.guardToggles == 1);
+    assert(std::abs(toggleSnapshot.lastTogglePercent - 15.f) < 0.0001f);
+    assert(std::abs(toggleSnapshot.lastToggleRiderPercent - 3.f) < 0.0001f);
+    t.record(0.0004, 480, 48000, 3002, 10.0, false, 0.0001);
+    assert(t.guardToggles() == 1 && t.spikes() == 1);
+    t.reset(); published.publish(t);
+    assert(published.read().guardToggles == 0);
     std::cout << "Performance telemetry tests passed\n";
 }

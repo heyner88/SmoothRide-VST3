@@ -56,7 +56,8 @@ private:
     float displayedBlockRmsDb = -90.0f;
     float displayedAverageLoad = 0.0f, displayedPeakLoad = 0.0f, displayedCallbackUs = 0.0f;
     float displayedRollingPeak = 0.0f;
-    std::uint64_t displayedSpikes = 0;
+    std::uint64_t displayedSpikes = 0, displayedGuardToggles = 0;
+    float displayedLastTogglePercent = 0, displayedLastToggleRiderPercent = 0;
     float displayedLastSpikePercent = 0, displayedLastSpikeUs = 0, displayedLastSpikeBudgetUs = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessorEditor)

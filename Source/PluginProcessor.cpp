@@ -43,6 +43,7 @@ void SmoothRideAudioProcessor::prepareToPlay(double sr, int) {
     currentCompareGainLinear = previousCompareGainLinear = 1.f;
     lastSnapshotVersion = snapshotVersion.load(std::memory_order_relaxed);
     performance.reset();
+    guardStateInitialized = false;
     publishedDSP.publish(performance);
     lastDSPResetRevision = dspResetRevision.load(std::memory_order_acquire);
     rollingPeakLoad.store(0.f, std::memory_order_relaxed);
@@ -84,6 +85,10 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     settings.lowLevelProtect = p("lowProtect");
     settings.adaptiveFloor = p("adaptiveFloor");
     settings.noiseGuard = p("noiseGuard");
+    const bool guardNow = settings.noiseGuard >= 0.5f;
+    const bool guardToggled = guardStateInitialized && guardNow != lastGuardState;
+    lastGuardState = guardNow;
+    guardStateInitialized = true;
     float inPeak = 0.0f;
     double inputPower = 0.0;
     for (int c = 0; c < channels; ++c) {
@@ -118,8 +123,10 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
              buffer.getNumSamples(), channels == 2);
     }
     rider.setSettings(settings);
+    const auto riderStart = std::chrono::steady_clock::now();
     rider.process(buffer.getWritePointer(0), channels == 2 ? buffer.getWritePointer(1) : nullptr,
                   buffer.getNumSamples(), channels == 2);
+    const auto riderEnd = std::chrono::steady_clock::now();
     // Apply optional comparison-only gain, independently of the saved DSP parameters.
     // Crossfade from both full processing engines rather than abruptly switching gain.
     // Gain matching is bounded to +/-6 dB per slot and fades into place over 80 ms.
@@ -169,7 +176,8 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     const double seconds = std::chrono::duration<double>(callbackEnd - callbackStart).count();
     const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(callbackEnd.time_since_epoch()).count();
     performance.record(seconds, buffer.getNumSamples(), currentSampleRate, timestamp,
-                       dspSpikeThreshold.load(std::memory_order_relaxed));
+                       dspSpikeThreshold.load(std::memory_order_relaxed), guardToggled,
+                       std::chrono::duration<double>(riderEnd - riderStart).count());
     averageBlockLoad.store(performance.averagePercent(), std::memory_order_relaxed);
     maximumBlockLoad.store(performance.maximumPercent(), std::memory_order_relaxed);
     rollingPeakLoad.store(performance.rollingPeakPercent(), std::memory_order_relaxed);
