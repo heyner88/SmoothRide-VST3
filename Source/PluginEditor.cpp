@@ -208,11 +208,16 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedBlockRmsDb = ampDb(processor.getInputBlockRms());
     displayedRequestedDb = processor.getRequestedRideDb();
     displayedActive = processor.getRiderActive();
-    displayedAverageLoad = processor.getAverageBlockLoadPercent();
-    displayedPeakLoad = processor.getMaximumBlockLoadPercent();
-    displayedRollingPeak = processor.getRollingPeakLoadPercent();
-    displayedSpikes = processor.getDSPSpikeCount();
-    displayedCallbackUs = processor.getLastCallbackMicroseconds();
+    const auto dsp = processor.getDSPSnapshot();
+    processor.rememberDSPSnapshot(dsp);
+    displayedAverageLoad = dsp.average;
+    displayedPeakLoad = dsp.peak;
+    displayedRollingPeak = dsp.rollingPeak;
+    displayedSpikes = dsp.spikes;
+    displayedCallbackUs = dsp.callbackUs;
+    displayedLastSpikePercent = dsp.lastSpikePercent;
+    displayedLastSpikeUs = dsp.lastSpikeUs;
+    displayedLastSpikeBudgetUs = dsp.lastSpikeBudgetUs;
     comparisonInfo.setText("Output RMS " + juce::String(processor.getRecentOutputRmsDb(), 1)
        + " dBFS   |   Match " + juce::String(processor.getABMatchingDb(), 1) + " dB"
        + "   |   Floor " + juce::String(processor.getEffectiveFloorDb(), 1) + " dB",
@@ -282,7 +287,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.6.2  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
+    g.drawText("v0.6.3  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -292,6 +297,13 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
                + "  SPIKES " + juce::String(static_cast<juce::int64>(displayedSpikes))
                + "  LAST " + juce::String(displayedCallbackUs, 0) + " us",
                270, 12, 608, 24, juce::Justification::centredLeft);
+
+    g.setColour(faint);
+    g.setFont(juce::Font(juce::FontOptions(10.0f)));
+    g.drawText("LAST SPIKE " + juce::String(displayedLastSpikePercent, 2) + "%  ("
+               + juce::String(displayedLastSpikeUs, 1) + " / "
+               + juce::String(displayedLastSpikeBudgetUs, 1) + " us)",
+               272, 32, 595, 14, juce::Justification::centredLeft);
 
     // Wide, single-row peak meters: all coordinates stay inside 1080 x 600.
     g.setColour(panel);

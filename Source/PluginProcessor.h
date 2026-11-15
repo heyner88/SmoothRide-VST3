@@ -63,6 +63,8 @@ public:
     bool getSilenceBlocked() const noexcept { return silenceBlocked.load(std::memory_order_relaxed); }
     bool getNoiseBlocked() const noexcept { return noiseBlocked.load(std::memory_order_relaxed); }
     float getNoiseReferenceDb() const noexcept { return noiseReferenceDb.load(std::memory_order_relaxed); }
+    smoothride::DSPSnapshot getDSPSnapshot() const noexcept { return publishedDSP.read(); }
+    void rememberDSPSnapshot(const smoothride::DSPSnapshot& s) const noexcept { publishedDSP.remember(s); }
     float getAverageBlockLoadPercent() const noexcept { return averageBlockLoad.load(std::memory_order_relaxed); }
     float getMaximumBlockLoadPercent() const noexcept { return maximumBlockLoad.load(std::memory_order_relaxed); }
     float getLastCallbackMicroseconds() const noexcept { return callbackMicroseconds.load(std::memory_order_relaxed); }
@@ -88,6 +90,7 @@ private:
     double recentPower = 1.e-12;
 
     smoothride::PerformanceTelemetry performance;
+    smoothride::PublishedDSPTelemetry publishedDSP;
     double currentSampleRate = 48000.0;
     std::atomic<float> averageBlockLoad {0.0f}, maximumBlockLoad {0.0f}, callbackMicroseconds {0.0f};
     std::atomic<float> rollingPeakLoad {0.0f}, dspSpikeThreshold {10.0f};

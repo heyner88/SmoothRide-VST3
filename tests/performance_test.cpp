@@ -30,5 +30,24 @@ int main() {
     t.reset();
     assert(t.spikes() == 0 && t.rollingPeakPercent() == 0.f);
     assert(t.averagePercent() == 0 && t.maximumPercent() == 0);
+    // Any counted spike must have a matching historical peak >= threshold.
+    smoothride::PublishedDSPTelemetry published;
+    t.reset();
+    published.publish(t);
+    for (int i = 0; i < 200; ++i) {
+        t.record(i % 2 ? 0.000126 : 0.00112, 480, 48000, 2000 + i / 10, 10.0);
+        published.publish(t);
+        const auto snap = published.read();
+        published.remember(snap);
+        if (snap.spikes > 0) {
+            assert(snap.peak >= 10.f);
+            assert(snap.lastSpikePercent >= 10.f);
+            assert(snap.lastSpikeUs > 0.f);
+            assert(std::abs(snap.lastSpikeBudgetUs - 10000.f) < 0.1f);
+        }
+    }
+    t.reset(); published.publish(t);
+    const auto cleared = published.read();
+    assert(cleared.spikes == 0 && cleared.peak == 0 && cleared.lastSpikePercent == 0);
     std::cout << "Performance telemetry tests passed\n";
 }

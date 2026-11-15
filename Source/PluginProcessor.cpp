@@ -43,6 +43,7 @@ void SmoothRideAudioProcessor::prepareToPlay(double sr, int) {
     currentCompareGainLinear = previousCompareGainLinear = 1.f;
     lastSnapshotVersion = snapshotVersion.load(std::memory_order_relaxed);
     performance.reset();
+    publishedDSP.publish(performance);
     lastDSPResetRevision = dspResetRevision.load(std::memory_order_acquire);
     rollingPeakLoad.store(0.f, std::memory_order_relaxed);
     dspSpikeCount.store(0, std::memory_order_relaxed);
@@ -63,6 +64,7 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     if (resetRevision != lastDSPResetRevision) {
         lastDSPResetRevision = resetRevision;
         performance.reset();
+        publishedDSP.publish(performance);
         averageBlockLoad.store(0.f, std::memory_order_relaxed);
         maximumBlockLoad.store(0.f, std::memory_order_relaxed);
         rollingPeakLoad.store(0.f, std::memory_order_relaxed);
@@ -173,6 +175,7 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     rollingPeakLoad.store(performance.rollingPeakPercent(), std::memory_order_relaxed);
     dspSpikeCount.store(performance.spikes(), std::memory_order_relaxed);
     callbackMicroseconds.store(performance.callbackMicroseconds(), std::memory_order_relaxed);
+    publishedDSP.publish(performance);
 }
 juce::AudioProcessorEditor* SmoothRideAudioProcessor::createEditor() {
     return new SmoothRideAudioProcessorEditor(*this);
