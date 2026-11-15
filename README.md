@@ -1,3 +1,9 @@
+# SmoothRide v0.2
+
+**Read [README-v0.2.md](README-v0.2.md) for updated controls, presets, safety notes, and compatibility guidance.** The original v0.1 README follows for historical context.
+
+---
+
 # SmoothRide v0.1 — original VST3 general-purpose stereo gain rider
 
 **Prototype, not a tested Windows binary.** Made for EqualizerAPO-XT testing. No W.A. Production code or assets used.

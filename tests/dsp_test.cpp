@@ -3,24 +3,46 @@
 #include <cmath>
 #include <iostream>
 #include <vector>
+#include <algorithm>
+constexpr double pi = 3.14159265358979323846;
+std::vector<float> sine(int n, float amp) {
+    std::vector<float> x(n);
+    for (int i=0;i<n;++i) x[i]=(float)(amp*std::sin(2*pi*440*i/48000.0));
+    return x;
+}
 int main() {
-    smoothride::GainRider ride;
-    ride.prepare(48000);
-    smoothride::Settings s;
-    ride.setSettings(s);
-    std::vector<float> left(48000), right(48000);
-    for(int i=0;i<48000;++i) left[i]=right[i]=(float)(0.5*std::sin(2*3.141592653589793*440.0*i/48000.0));
-    ride.process(left.data(),right.data(),48000,true);
-    for (int i=0;i<48000;++i) { assert(std::isfinite(left[i])); assert(std::abs(left[i])<=0.89126f); assert(left[i]==right[i]); }
-    std::cout << "PASS: stereo, finite samples, sample peak ceiling\n";
-    std::fill(left.begin(),left.end(),0.0f); std::fill(right.begin(),right.end(),0.0f);
-    ride.process(left.data(),right.data(),48000,true);
-    for(float x:left) assert(x==0.0f);
-    std::cout << "PASS: silence stays silent (no noise amplification)\n";
-    s.mix=0.0f; s.outputDb=0.0f; s.ceilingDb=-0.1f;
-    ride.reset(); ride.setSettings(s);
-    for(int i=0;i<48000;++i) left[i]=right[i]=(float)(0.1*std::sin(2*3.141592653589793*440.0*i/48000.0));
-    const float original=left[100]; ride.process(left.data(),right.data(),48000,true);
-    assert(std::abs(left[100]-original)<1.0e-5f);
-    std::cout << "PASS: dry with unity gain is transparent\n";
+    using namespace smoothride;
+    GainRider rider;
+    rider.prepare(48000);
+    Settings s;
+    rider.setSettings(s);
+    auto left=sine(48000, 0.5f), right=left;
+    rider.process(left.data(),right.data(),48000,true);
+    for(int i=0;i<48000;++i) {
+        assert(std::isfinite(left[i]));
+        assert(std::abs(left[i])<=0.89126f);
+        assert(left[i]==right[i]);
+    }
+    std::cout<<"PASS stereo linked, sample ceiling, finite\n";
+    std::fill(left.begin(),left.end(),0); std::fill(right.begin(),right.end(),0);
+    rider.process(left.data(),right.data(),48000,true);
+    for(auto x:left) assert(x==0.0f);
+    std::cout<<"PASS silence unchanged\n";
+    rider.reset(); s.mix=0; s.outputDb=0; s.ceilingDb=-0.1f; rider.setSettings(s);
+    left=sine(48000,0.1f); right=left;
+    auto original=left[100]; rider.process(left.data(),right.data(),48000,true);
+    assert(std::abs(left[100]-original)<1e-5);
+    std::cout<<"PASS dry unity\n";
+    // Independently bound boost and cut, with enough settling time for RMS detector.
+    rider.reset(); s.mix=1; s.outputDb=0; s.maxBoostDb=6; s.maxCutDb=3;
+    s.upMs=100; s.downMs=100; s.ceilingDb=-0.1f;
+    rider.setSettings(s);
+    left=sine(48000*4,0.015f);
+    rider.process(left.data(),nullptr,(int)left.size(),false);
+    assert(rider.currentRideDb()>5.5f && rider.currentRideDb()<=6.001f);
+    std::cout<<"PASS max boost limit\n";
+    rider.reset(); left=sine(48000*4,0.6f);
+    rider.process(left.data(),nullptr,(int)left.size(),false);
+    assert(rider.currentRideDb() < -2.5f && rider.currentRideDb()>=-3.001f);
+    std::cout<<"PASS max cut limit\n";
 }

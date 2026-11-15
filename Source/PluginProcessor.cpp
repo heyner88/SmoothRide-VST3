@@ -11,10 +11,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout SmoothRideAudioProcessor::cr
         layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id, 1}, name,
                         juce::NormalisableRange<float>(lo, hi, step), def));
     };
-    add("target", "Target RMS (dB)", -30.0f, -8.0f, -15.0f, 0.1f);
+    add("target", "Target RMS (dB)", -30.0f, -8.0f, -12.0f, 0.1f);
     add("floor", "Floor (dB)", -90.0f, -30.0f, -60.0f, 0.1f);
-    add("range", "Ride Range (+/- dB)", 0.0f, 12.0f, 6.0f, 0.1f);
-    add("speed", "Ride Speed (ms)", 100.0f, 10000.0f, 1800.0f, 10.0f);
+    add("range", "Max Boost (dB)", 0.0f, 12.0f, 6.0f, 0.1f);
+    add("maxCut", "Max Cut (dB)", 0.0f, 12.0f, 3.0f, 0.1f);
+    add("speed", "Gain Up Speed (ms)", 100.0f, 30000.0f, 3000.0f, 10.0f);
+    add("downSpeed", "Gain Down Speed (ms)", 50.0f, 10000.0f, 650.0f, 10.0f);
     add("mix", "Mix (%)", 0.0f, 100.0f, 65.0f, 1.0f);
     add("output", "Output Gain (dB)", -12.0f, 12.0f, 6.0f, 0.1f);
     add("ceiling", "Safety Ceiling (dBFS)", -12.0f, -0.1f, -1.0f, 0.1f);
@@ -33,8 +35,8 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     for (int c = channels; c < buffer.getNumChannels(); ++c) buffer.clear(c, 0, buffer.getNumSamples());
     auto p = [&](const char* id) { return apvts.getRawParameterValue(id)->load(); };
     smoothride::Settings settings;
-    settings.targetDb = p("target"); settings.floorDb = p("floor"); settings.rangeDb = p("range");
-    settings.speedMs = p("speed"); settings.mix = p("mix") / 100.0f; settings.outputDb = p("output");
+    settings.targetDb = p("target"); settings.floorDb = p("floor"); settings.maxBoostDb = p("range"); settings.maxCutDb = p("maxCut");
+    settings.upMs = p("speed"); settings.downMs = p("downSpeed"); settings.mix = p("mix") / 100.0f; settings.outputDb = p("output");
     settings.ceilingDb = p("ceiling");
     rider.setSettings(settings);
     rider.process(buffer.getWritePointer(0), channels == 2 ? buffer.getWritePointer(1) : nullptr,
