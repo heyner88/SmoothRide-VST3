@@ -27,7 +27,7 @@ public:
     void setStateInformation(const void*, int) override;
     juce::AudioProcessorValueTreeState apvts;
     // User snapshots are stored within the host state, not on the audio thread.
-    static constexpr int presetParameterCount = 12;
+    static constexpr int presetParameterCount = 13;
     using Snapshot = std::array<float, presetParameterCount>;
     Snapshot captureParameters() const;
     void applyParameters(const Snapshot& values);
@@ -60,6 +60,9 @@ public:
     float getRequestedRideDb() const noexcept { return requestedRideDb.load(std::memory_order_relaxed); }
     float getEffectiveFloorDb() const noexcept { return effectiveFloorDb.load(std::memory_order_relaxed); }
     bool getRiderActive() const noexcept { return riderActive.load(std::memory_order_relaxed); }
+    bool getSilenceBlocked() const noexcept { return silenceBlocked.load(std::memory_order_relaxed); }
+    bool getNoiseBlocked() const noexcept { return noiseBlocked.load(std::memory_order_relaxed); }
+    float getNoiseReferenceDb() const noexcept { return noiseReferenceDb.load(std::memory_order_relaxed); }
     float getAverageBlockLoadPercent() const noexcept { return averageBlockLoad.load(std::memory_order_relaxed); }
     float getMaximumBlockLoadPercent() const noexcept { return maximumBlockLoad.load(std::memory_order_relaxed); }
     float getLastCallbackMicroseconds() const noexcept { return callbackMicroseconds.load(std::memory_order_relaxed); }
@@ -85,6 +88,7 @@ private:
     std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f}, inputBlockRms {0.0f};
     std::atomic<float> rideDb {0.0f}, limiterReductionDb {0.0f};
     std::atomic<float> detectedRmsDb {-160.0f}, requestedRideDb {0.0f}, effectiveFloorDb {-60.0f};
-    std::atomic<bool> riderActive {false};
+    std::atomic<bool> riderActive {false}, silenceBlocked {false}, noiseBlocked {false};
+    std::atomic<float> noiseReferenceDb {-120.0f};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessor)
 };

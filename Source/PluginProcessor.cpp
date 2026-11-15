@@ -25,6 +25,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SmoothRideAudioProcessor::cr
     add("gateHyst", "Floor Hysteresis (dB)", 0.0f, 12.0f, 0.0f, 0.5f);
     add("lowProtect", "Soft Floor (0=Off, 1=On)", 0.0f, 1.0f, 0.0f, 1.0f);
     add("adaptiveFloor", "Adaptive Floor (0=Off, 1=On)", 0.0f, 1.0f, 0.0f, 1.0f);
+    add("noiseGuard", "Experimental Noise Guard (0=Off, 1=On)", 0.0f, 1.0f, 0.0f, 1.0f);
     return layout;
 }
 void SmoothRideAudioProcessor::prepareToPlay(double sr, int) {
@@ -66,6 +67,7 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     settings.gateHysteresisDb = p("gateHyst");
     settings.lowLevelProtect = p("lowProtect");
     settings.adaptiveFloor = p("adaptiveFloor");
+    settings.noiseGuard = p("noiseGuard");
     float inPeak = 0.0f;
     double inputPower = 0.0;
     for (int c = 0; c < channels; ++c) {
@@ -144,6 +146,9 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     requestedRideDb.store(rider.currentRequestedRideDb(), std::memory_order_relaxed);
     effectiveFloorDb.store(rider.currentEffectiveFloorDb(), std::memory_order_relaxed);
     riderActive.store(rider.isRidingActive(), std::memory_order_relaxed);
+    silenceBlocked.store(rider.isSilenceBlocked(), std::memory_order_relaxed);
+    noiseBlocked.store(rider.isNoiseBlocked(), std::memory_order_relaxed);
+    noiseReferenceDb.store(rider.currentNoiseReferenceDb(), std::memory_order_relaxed);
     const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - callbackStart).count();
     performance.record(seconds, buffer.getNumSamples(), currentSampleRate);
     averageBlockLoad.store(performance.averagePercent(), std::memory_order_relaxed);
@@ -154,9 +159,9 @@ juce::AudioProcessorEditor* SmoothRideAudioProcessor::createEditor() {
     return new SmoothRideAudioProcessorEditor(*this);
 }
 namespace {
-const std::array<const char*, 12> snapshotIDs {{
+const std::array<const char*, 13> snapshotIDs {{
     "target", "floor", "range", "maxCut", "speed", "downSpeed", "mix",
-    "output", "ceiling", "gateHyst", "lowProtect", "adaptiveFloor"
+    "output", "ceiling", "gateHyst", "lowProtect", "adaptiveFloor", "noiseGuard"
 }};
 const juce::Identifier userBankID("UserPresets"), presetID("UserPreset"), abID("ABSlot");
 
@@ -190,6 +195,8 @@ SmoothRideAudioProcessor::Snapshot readSnapshot(juce::ValueTree node,
     for (size_t i = 0; i < snapshotIDs.size(); ++i) {
         const juce::Identifier key(snapshotIDs[i]);
         if (node.hasProperty(key)) result[i] = (float) node.getProperty(key);
+        else if (juce::String(snapshotIDs[i]) == "noiseGuard"
+                 || juce::String(snapshotIDs[i]) == "adaptiveFloor") result[i] = 0.f;
     }
     return result;
 }
@@ -264,12 +271,16 @@ bool SmoothRideAudioProcessor::exportUserPreset(const juce::String& name,
     auto node = findNamed(apvts.state.getChildWithName(userBankID), presetID, name);
     if (!node.isValid()) { error = "Select a saved preset first"; return false; }
     juce::XmlElement xml("SmoothRidePreset");
-    xml.setAttribute("version", 2);
+    xml.setAttribute("version", 3);
     xml.setAttribute("name", name);
     for (const auto* id : snapshotIDs) {
         const juce::Identifier key(id);
-        if (!node.hasProperty(key)) { error = "Preset is missing a parameter"; return false; }
-        xml.setAttribute(juce::String(id), (double)(float)node.getProperty(key));
+        if (!node.hasProperty(key) && juce::String(id) != "noiseGuard"
+            && juce::String(id) != "adaptiveFloor") {
+            error = "Preset is missing a parameter"; return false;
+        }
+        xml.setAttribute(juce::String(id), node.hasProperty(key)
+            ? (double)(float)node.getProperty(key) : 0.0);
     }
     if (!file.replaceWithText(xml.toString(), false, false, "\n")) {
         error = "Could not write preset file"; return false;
@@ -285,7 +296,7 @@ bool SmoothRideAudioProcessor::importUserPreset(const juce::File& file,
     juce::XmlDocument doc(file);
     auto xml = doc.getDocumentElement();
     const int fileVersion = xml ? xml->getIntAttribute("version", -1) : -1;
-    if (!xml || !xml->hasTagName("SmoothRidePreset") || (fileVersion != 1 && fileVersion != 2)) {
+    if (!xml || !xml->hasTagName("SmoothRidePreset") || (fileVersion != 1 && fileVersion != 2 && fileVersion != 3)) {
         error = "Unsupported preset format"; return false;
     }
     const auto name = xml->getStringAttribute("name").trim();
@@ -301,7 +312,8 @@ bool SmoothRideAudioProcessor::importUserPreset(const juce::File& file,
         const juce::String id(snapshotIDs[i]);
         if (!xml->hasAttribute(id)) {
             // v0.5.x preset files have 11 parameters, no adaptive mode.
-            if (fileVersion == 1 && id == "adaptiveFloor") {
+            if ((fileVersion == 1 && id == "adaptiveFloor")
+                || (fileVersion <= 2 && id == "noiseGuard")) {
                 values[i] = 0.f;
                 continue;
             }

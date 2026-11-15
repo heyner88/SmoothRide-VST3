@@ -39,6 +39,8 @@ private:
     juce::ToggleButton matchAB {"MATCH A/B"};
     juce::TextButton calibrateA {"Cal A"}, calibrateB {"Cal B"};
     juce::Label comparisonInfo;
+    juce::ToggleButton noiseGuard {"NOISE GUARD (EXP)"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> noiseGuardAttachment;
 
 
     std::array<float, 240> gainHistory {};

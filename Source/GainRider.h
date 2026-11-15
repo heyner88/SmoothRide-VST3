@@ -17,11 +17,12 @@ struct Settings {
     float gateHysteresisDb = 0.0f; // 0 preserves v0.3.1 threshold behavior
     float lowLevelProtect = 0.0f; // 0 preserves v0.3.1; 1 applies 12 dB soft floor
     float adaptiveFloor = 0.0f; // OFF by default; optional low-level program detection
+    float noiseGuard = 0.0f; // experimental: blocks steady low-level signal, OFF by default
 };
 class GainRider {
 public:
     void prepare(double sr) noexcept { sampleRate = std::max(8000.0, sr); reset(); }
-    void reset() noexcept { power = 0.0; rideDb = 0.0; peakGain = 1.0; detectedRmsDb = -160.0; requestedRideDb = 0.0; ridingActive = false; effectiveFloorDb = settings.floorDb; }
+    void reset() noexcept { power = 0.0; rideDb = 0.0; peakGain = 1.0; detectedRmsDb = -160.0; requestedRideDb = 0.0; ridingActive = false; effectiveFloorDb = settings.floorDb; noiseReferenceDb = -120.0; silenceBlocked = false; noiseBlocked = false; }
     void setSettings(Settings s) noexcept { settings = s; }
     float currentRideDb() const noexcept { return (float)rideDb; }
     float currentPeakReductionDb() const noexcept {
@@ -32,6 +33,9 @@ public:
     float currentRequestedRideDb() const noexcept { return (float)requestedRideDb; }
     float currentEffectiveFloorDb() const noexcept { return (float)effectiveFloorDb; }
     bool isRidingActive() const noexcept { return ridingActive; }
+    bool isSilenceBlocked() const noexcept { return silenceBlocked; }
+    bool isNoiseBlocked() const noexcept { return noiseBlocked; }
+    float currentNoiseReferenceDb() const noexcept { return (float)noiseReferenceDb; }
     void process(float* left, float* right, int numSamples, bool stereo) noexcept {
         if (!left || numSamples <= 0) return;
         const double detect = coeff(250.0); // stereo-linked 250 ms RMS
@@ -42,6 +46,10 @@ public:
         const double target = settings.targetDb;
         const double manualFloor = settings.floorDb;
         const bool adaptive = settings.adaptiveFloor >= 0.5f;
+        const bool guardEnabled = adaptive && settings.noiseGuard >= 0.5f;
+        // Conservative, experimental steady-low-level detector, not a speech/noise classifier.
+        const double referenceRise = coeff(8000.0);
+        const double referenceFall = coeff(500.0);
         const double hysteresis = std::clamp((double)settings.gateHysteresisDb, 0.0, 12.0);
         const bool protect = settings.lowLevelProtect >= 0.5f;
         const double maxBoost = std::max(0.0, (double)settings.maxBoostDb);
@@ -64,10 +72,20 @@ public:
                 : manualFloor;
             effectiveFloorDb = floor;
             const bool aboveSilenceCutoff = !adaptive || detectedDb > -88.0;
+            // A slower rising reference follows persistent low-level energy; a faster
+            // falling reference follows quiet gaps. Only enabled guard affects riding.
+            // Constant quiet music may be classified like noise: use only if useful.
+            if (guardEnabled && detectedDb > -88.0) {
+                const double alpha = detectedDb > noiseReferenceDb ? referenceRise : referenceFall;
+                noiseReferenceDb = alpha*noiseReferenceDb + (1.0-alpha)*detectedDb;
+            }
+            silenceBlocked = adaptive && !aboveSilenceCutoff;
+            noiseBlocked = guardEnabled && aboveSilenceCutoff && detectedDb < -55.0
+                           && (detectedDb - noiseReferenceDb) < 1.5;
             // Threshold gate keeps silence/noise from being amplified.
             // With hysteresis disabled, this reproduces the original v0.3.1 comparison.
             // Enabled: activate above floor + hyst/2; remain active down to floor - hyst/2.
-            const bool active = aboveSilenceCutoff && (hysteresis <= 0.0
+            const bool active = aboveSilenceCutoff && !noiseBlocked && (hysteresis <= 0.0
                 ? detectedDb > floor
                 : (ridingActive ? detectedDb > floor - hysteresis*0.5
                                 : detectedDb > floor + hysteresis*0.5));
@@ -99,6 +117,7 @@ private:
     Settings settings;
     double sampleRate = 48000.0, power = 0.0, rideDb = 0.0, peakGain = 1.0;
     double detectedRmsDb = -160.0, requestedRideDb = 0.0, effectiveFloorDb = -60.0;
-    bool ridingActive = false;
+    double noiseReferenceDb = -120.0;
+    bool ridingActive = false, silenceBlocked = false, noiseBlocked = false;
 };
 }

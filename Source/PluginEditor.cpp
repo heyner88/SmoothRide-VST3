@@ -162,6 +162,10 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     comparisonInfo.setColour(juce::Label::textColourId, faint);
     comparisonInfo.setFont(juce::Font(juce::FontOptions(11.f)));
     addAndMakeVisible(comparisonInfo);
+    noiseGuard.setColour(juce::ToggleButton::textColourId, faint);
+    noiseGuardAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.apvts, "noiseGuard", noiseGuard);
+    addAndMakeVisible(noiseGuard);
     notice.setColour(juce::Label::textColourId, faint);
     notice.setJustificationType(juce::Justification::centredRight);
     notice.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -257,7 +261,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.6.0  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
+    g.drawText("v0.6.1  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.drawText("DSP AVG " + juce::String(displayedAverageLoad, 2) + "%"
@@ -282,7 +286,11 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(chart, 8.f);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("24 s  |  RIDE (+/-12 dB)  /  RMS (-100..0 dBFS)", 31, 123, 565, 17, juce::Justification::centredLeft);
+    g.drawText("RIDE (+/-12 dB)  /  RMS (-100..0 dBFS)  |  NOISE REF "
+               + (processor.apvts.getRawParameterValue("noiseGuard")->load() >= 0.5f
+                   ? juce::String(processor.getNoiseReferenceDb(), 0) + " dB" : "OFF"),
+               31, 123, 625, 17,
+               juce::Justification::centredLeft);
     g.setColour(accent);
     g.drawText((displayedRideDb >= 0.f ? "+" : "") + juce::String(displayedRideDb, 1) + " dB",
                right-148, 123, 132, 17, juce::Justification::centredRight);
@@ -335,7 +343,12 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     const juce::String status = !displayedActive ? "BELOW FLOOR"
         : displayedRequestedDb >= boost-0.05f && boost>0.f ? "MAX BOOST"
         : displayedRequestedDb <= -cut+0.05f && cut>0.f ? "MAX CUT" : "ACTIVE";
-    drawDiagnostic(2, "RIDER STATUS", status, displayedActive ? accent : faint);
+    const bool adaptiveOn = processor.apvts.getRawParameterValue("adaptiveFloor")->load() >= 0.5f;
+    const juce::String detail = !adaptiveOn ? "MANUAL" : processor.getSilenceBlocked()
+        ? "SILENCE" : processor.getNoiseBlocked() ? "NOISE GUARD" : "ADAPTIVE";
+    drawDiagnostic(2, "RIDER STATUS / " + detail,
+        processor.getNoiseBlocked() ? "NOISE BLOCKED" : status,
+        displayedActive ? accent : faint);
 
     // Compact cards leave two rows for user presets and A/B snapshots.
     constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 66;
@@ -369,6 +382,7 @@ void SmoothRideAudioProcessorEditor::resized() {
     captureB.setBounds(575, 525, 85, 26);
     recallA.setBounds(672, 525, 85, 26);
     recallB.setBounds(762, 525, 85, 26);
+    noiseGuard.setBounds(660, 120, 195, 22);
     matchAB.setBounds(20, 559, 128, 25);
     calibrateA.setBounds(160, 557, 80, 27);
     calibrateB.setBounds(248, 557, 80, 27);

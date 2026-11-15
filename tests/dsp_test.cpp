@@ -112,4 +112,28 @@ int main() {
     assert(!adaptiveRider.isRidingActive());
     assert(adaptiveRider.currentRequestedRideDb() == 0.f);
     std::cout<<"PASS adaptive silence cutoff\n";
+    // New guard must be transparent while OFF and when Adaptive Floor is OFF.
+    Settings offGuard = adaptiveSettings;
+    offGuard.adaptiveFloor = 1.f; offGuard.noiseGuard = 0.f;
+    Settings disabledAdaptive = offGuard; disabledAdaptive.adaptiveFloor = 0.f; disabledAdaptive.noiseGuard = 1.f;
+    GainRider reference, ignoredGuard;
+    reference.prepare(48000); ignoredGuard.prepare(48000);
+    Settings cleanManual = disabledAdaptive; cleanManual.noiseGuard = 0.f;
+    reference.setSettings(cleanManual);
+    ignoredGuard.setSettings(disabledAdaptive);
+    auto identical=sine(48000, .0003f), identical2=identical;
+    reference.process(identical.data(),nullptr,(int)identical.size(),false);
+    ignoredGuard.process(identical2.data(),nullptr,(int)identical2.size(),false);
+    assert(identical == identical2);
+    assert(!ignoredGuard.isNoiseBlocked());
+    std::cout<<"PASS noise guard bypass in manual mode\n";
+    GainRider guarded;
+    guarded.prepare(48000);
+    offGuard.noiseGuard=1.f;
+    guarded.setSettings(offGuard);
+    auto steady=sine(48000*40, .0003f);
+    guarded.process(steady.data(),nullptr,(int)steady.size(),false);
+    assert(guarded.isNoiseBlocked());
+    assert(!guarded.isRidingActive());
+    std::cout<<"PASS experimental guard blocks long steady quiet program\n";
 }

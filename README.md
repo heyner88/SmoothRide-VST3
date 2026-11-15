@@ -1,6 +1,6 @@
-# SmoothRide v0.6.0
+# SmoothRide v0.6.1
 
-See [README-v0.6.0.md](README-v0.6.0.md) for features, limitations, compatibility and test procedure.
+See [README-v0.6.1.md](README-v0.6.1.md) for features, limitations, compatibility and test procedure.
 
 # SmoothRide v0.5.1
 
