@@ -14,6 +14,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Download JUCE
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch 8.0.10 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure project
+        run: cmake -S . -B build -A x64
+
+      - name: Build VST3
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Upload compiled plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmoothRide-Windows-x64-VST3
+          path: |
+            build/**/*.vst3/**
+            build/**/*.vst3
+          if-no-files-found: error
+
       - name: Configure project
         run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
 
