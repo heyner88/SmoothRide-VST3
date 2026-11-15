@@ -112,5 +112,27 @@ int main() {
     assert(detailed.lastToggleABPercent == 0.f);
     assert(!detailed.lastToggleABRunning);
     assert(detailed.normalPreAveragePercent == 0.f);
+    // v0.6.7: reset timing is separate from measured callback load.
+    t.reset();
+    t.record(0.001, 480, 48000, 6000, 10.0, false, 0.0001,
+             0.0006, 0.0003, 0.0, 0.0002, 0.0003, 0.0001, false, 0.0005);
+    published.publish(t);
+    auto x = published.read();
+    assert(std::abs(x.resetMicroseconds - 500.f) < 0.01f);
+    assert(std::abs(x.normalParamsPercent - 2.f) < 0.001f);
+    assert(std::abs(x.peak - 10.f) < 0.001f); // reset duration not included
+    t.record(0.002, 480, 48000, 6001, 10.0, true, 0.0002,
+             0.0016, 0.0002, 0.0, 0.0012, 0.0002, 0.0002, false);
+    t.record(0.003, 480, 48000, 6002, 10.0, true, 0.0003,
+             0.0024, 0.0003, 0.0, 0.0020, 0.0002, 0.0002, false);
+    published.publish(t);
+    x = published.read();
+    assert(std::abs(x.lastTogglePercent - 30.f) < 0.001f);
+    assert(std::abs(x.toggleParamsMeanPercent - 16.f) < 0.001f);
+    assert(std::abs(x.toggleParamsMaxPercent - 20.f) < 0.001f);
+    assert(std::abs(x.normalParamsPercent - 2.f) < 0.001f);
+    t.reset(); published.publish(t);
+    x = published.read();
+    assert(x.toggleParamsMaxPercent == 0.f && x.normalParamsPercent == 0.f && x.resetMicroseconds == 0.f);
     std::cout << "Performance telemetry tests passed\n";
 }

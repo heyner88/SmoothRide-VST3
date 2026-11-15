@@ -19,6 +19,8 @@ public:
         lastTogglePreLoad = lastTogglePostLoad = 0.0; lastMonitorUs = 0.0;
         lastToggleParamsLoad = lastToggleInputLoad = lastToggleABLoad = 0.0;
         baselinePreLoad = 0.0; baselineInitialized = false; lastToggleABRunning = false;
+        normalParamsLoad = 0.0; normalParamsInitialized = false;
+        toggleParamsSum = toggleParamsMaximum = 0.0; resetDurationUs = 0.0;
         for (auto& b : seconds) { b.second = -1; b.peak = 0.0; }
     }
 
@@ -29,12 +31,16 @@ public:
                 double preSeconds = 0.0, double postSeconds = 0.0,
                 double monitorSeconds = 0.0,
                 double parametersSeconds = 0.0, double inputAnalysisSeconds = 0.0,
-                double abPreparationSeconds = 0.0, bool abEngineRan = false) noexcept {
+                double abPreparationSeconds = 0.0, bool abEngineRan = false,
+                double resetSeconds = 0.0) noexcept {
         if (!std::isfinite(elapsedSeconds) || elapsedSeconds < 0.0
                 || sampleCount <= 0 || !std::isfinite(sampleRate) || sampleRate <= 0.0) return;
         const double deadline = static_cast<double>(sampleCount) / sampleRate;
         if (deadline <= 0.0) return;
         const double load = elapsedSeconds / deadline;
+        // Reset is measured before callbackStart and excluded from BLOCK / P.
+        if (std::isfinite(resetSeconds) && resetSeconds > 0.0)
+            resetDurationUs = resetSeconds * 1.e6;
         lastMicroseconds = elapsedSeconds * 1.0e6;
         // Monitoring cost was timed after record/publish in the PREVIOUS callback,
         // because this callback cannot include its own future telemetry work.
@@ -44,6 +50,9 @@ public:
         else averageLoad += 0.08 * (load - averageLoad);
         maxLoad = std::max(maxLoad, load);
         if (!guardToggled) {
+            const double params = std::max(0.0, parametersSeconds / deadline * 100.0);
+            if (!normalParamsInitialized) { normalParamsLoad = params; normalParamsInitialized = true; }
+            else normalParamsLoad += 0.02 * (params - normalParamsLoad);
             const double pre = std::max(0.0, preSeconds / deadline * 100.0);
             if (!baselineInitialized) { baselinePreLoad = pre; baselineInitialized = true; }
             else baselinePreLoad += 0.02 * (pre - baselinePreLoad);
@@ -62,6 +71,8 @@ public:
             lastToggleABLoad = std::isfinite(abPreparationSeconds) && abPreparationSeconds >= 0.0
                 ? std::clamp(abPreparationSeconds / deadline * 100.0, 0.0, lastToggleLoad) : 0.0;
             lastToggleABRunning = abEngineRan;
+            toggleParamsSum += lastToggleParamsLoad;
+            toggleParamsMaximum = std::max(toggleParamsMaximum, lastToggleParamsLoad);
             lastTogglePostLoad = std::isfinite(postSeconds) && postSeconds >= 0.0
                 ? std::clamp(postSeconds / deadline * 100.0, 0.0, lastToggleLoad) : 0.0;
         }
@@ -109,6 +120,10 @@ public:
     float averagePercent() const noexcept { return static_cast<float>(100.0 * averageLoad); }
     float maximumPercent() const noexcept { return static_cast<float>(100.0 * maxLoad); }
     float rollingPeakPercent() const noexcept { return static_cast<float>(100.0 * rollingMaxLoad); }
+    float normalParamsPercent() const noexcept { return static_cast<float>(normalParamsLoad); }
+    float toggleParamsMeanPercent() const noexcept { return static_cast<float>(toggleCount ? toggleParamsSum / static_cast<double>(toggleCount) : 0.0); }
+    float toggleParamsMaxPercent() const noexcept { return static_cast<float>(toggleParamsMaximum); }
+    float resetMicroseconds() const noexcept { return static_cast<float>(resetDurationUs); }
     float callbackMicroseconds() const noexcept { return static_cast<float>(lastMicroseconds); }
     std::uint64_t spikes() const noexcept { return spikeCount; }
     float lastSpikeLoadPercent() const noexcept { return static_cast<float>(lastSpikePercent); }
@@ -122,6 +137,8 @@ private:
     double lastToggleLoad = 0.0, lastToggleRiderLoad = 0.0;
     double lastTogglePreLoad = 0.0, lastTogglePostLoad = 0.0, lastMonitorUs = 0.0;
     double lastToggleParamsLoad = 0.0, lastToggleInputLoad = 0.0, lastToggleABLoad = 0.0;
+    double normalParamsLoad = 0.0, toggleParamsSum = 0.0, toggleParamsMaximum = 0.0, resetDurationUs = 0.0;
+    bool normalParamsInitialized = false;
     double baselinePreLoad = 0.0;
     bool baselineInitialized = false, lastToggleABRunning = false;
     double lastSpikePercent = 0.0, lastSpikeMicroseconds = 0.0, lastSpikeBudgetMicroseconds = 0.0;
@@ -141,6 +158,7 @@ struct DSPSnapshot {
     float lastTogglePrePercent = 0, lastTogglePostPercent = 0, monitorUs = 0;
     float lastToggleParamsPercent = 0, lastToggleInputPercent = 0, lastToggleABPercent = 0;
     float normalPreAveragePercent = 0;
+    float normalParamsPercent = 0, toggleParamsMeanPercent = 0, toggleParamsMaxPercent = 0, resetMicroseconds = 0;
     bool lastToggleABRunning = false;
 };
 class PublishedDSPTelemetry {
@@ -164,6 +182,10 @@ public:
         toggleInput.store(t.lastToggleInputPercent(), std::memory_order_seq_cst);
         toggleAB.store(t.lastToggleABPercent(), std::memory_order_seq_cst);
         baselinePre.store(t.normalPreAveragePercent(), std::memory_order_seq_cst);
+        normalParams.store(t.normalParamsPercent(), std::memory_order_seq_cst);
+        meanParams.store(t.toggleParamsMeanPercent(), std::memory_order_seq_cst);
+        maxParams.store(t.toggleParamsMaxPercent(), std::memory_order_seq_cst);
+        resetUs.store(t.resetMicroseconds(), std::memory_order_seq_cst);
         abRunning.store(t.wasABEngineRunning(), std::memory_order_seq_cst);
         monitorUs.store(t.lastMonitorMicroseconds(), std::memory_order_seq_cst);
         version.fetch_add(1, std::memory_order_seq_cst); // even: complete
@@ -192,6 +214,10 @@ public:
             result.lastToggleInputPercent = toggleInput.load(std::memory_order_seq_cst);
             result.lastToggleABPercent = toggleAB.load(std::memory_order_seq_cst);
             result.normalPreAveragePercent = baselinePre.load(std::memory_order_seq_cst);
+            result.normalParamsPercent = normalParams.load(std::memory_order_seq_cst);
+            result.toggleParamsMeanPercent = meanParams.load(std::memory_order_seq_cst);
+            result.toggleParamsMaxPercent = maxParams.load(std::memory_order_seq_cst);
+            result.resetMicroseconds = resetUs.load(std::memory_order_seq_cst);
             result.lastToggleABRunning = abRunning.load(std::memory_order_seq_cst);
             if (version.load(std::memory_order_seq_cst) == before) return result;
         }
@@ -208,6 +234,7 @@ private:
     std::atomic<float> toggleLoad {0}, toggleRiderLoad {0};
     std::atomic<float> togglePreLoad {0}, togglePostLoad {0}, monitorUs {0};
     std::atomic<float> toggleParams {0}, toggleInput {0}, toggleAB {0}, baselinePre {0};
+    std::atomic<float> normalParams {0}, meanParams {0}, maxParams {0}, resetUs {0};
     std::atomic<bool> abRunning {false};
     mutable DSPSnapshot lastGood {};
 };

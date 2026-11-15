@@ -228,6 +228,10 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedToggleInput = dsp.lastToggleInputPercent;
     displayedToggleAB = dsp.lastToggleABPercent;
     displayedNormalPre = dsp.normalPreAveragePercent;
+    displayedNormalParams = dsp.normalParamsPercent;
+    displayedToggleParamsMean = dsp.toggleParamsMeanPercent;
+    displayedToggleParamsMax = dsp.toggleParamsMaxPercent;
+    displayedResetUs = dsp.resetMicroseconds;
     displayedABRunning = dsp.lastToggleABRunning;
     comparisonInfo.setText("Output RMS " + juce::String(processor.getRecentOutputRmsDb(), 1)
        + " dBFS   |   Match " + juce::String(processor.getABMatchingDb(), 1) + " dB"
@@ -298,7 +302,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.6.6  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
+    g.drawText("v0.6.7  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -315,7 +319,9 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
                + juce::String(displayedLastSpikeUs, 1) + " / "
                + juce::String(displayedLastSpikeBudgetUs, 1) + " us)",
                272, 32, 386, 14, juce::Justification::centredLeft);
+    g.setFont(juce::Font(juce::FontOptions(9.0f)));
     g.drawText("T " + juce::String(static_cast<juce::int64>(displayedGuardToggles))
+               + "  BLOCK " + juce::String(displayedLastTogglePercent, 1) + "%"
                + "  P " + juce::String(displayedToggleParams, 1) + "%"
                + "  I " + juce::String(displayedToggleInput, 1) + "%"
                + "  AB " + juce::String(displayedToggleAB, 1) + "%"
@@ -341,10 +347,14 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(chart, 8.f);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("RIDE / RMS   |   NORMAL PRE " + juce::String(displayedNormalPre, 2) + "%   |   NOISE REF "
+    g.drawText("RIDE / RMS   |   BASE P " + juce::String(displayedNormalParams, 3)
+               + "%   P AVG/MAX " + juce::String(displayedToggleParamsMean, 1)
+               + "/" + juce::String(displayedToggleParamsMax, 1)
+               + "%   RESET " + juce::String(displayedResetUs, 1)
+               + " us   |   NOISE REF "
                + (processor.apvts.getRawParameterValue("noiseGuard")->load() >= 0.5f
                    ? juce::String(processor.getNoiseReferenceDb(), 0) + " dB" : "OFF"),
-               31, 123, 625, 17,
+               31, 123, 810, 17,
                juce::Justification::centredLeft);
     g.setColour(accent);
     g.drawText((displayedRideDb >= 0.f ? "+" : "") + juce::String(displayedRideDb, 1) + " dB",

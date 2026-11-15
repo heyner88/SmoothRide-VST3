@@ -60,10 +60,11 @@ bool SmoothRideAudioProcessor::isBusesLayoutSupported(const BusesLayout& l) cons
            && l.getMainOutputChannelSet() == input;
 }
 void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
-    const auto callbackStart = std::chrono::steady_clock::now();
+    const auto resetStart = std::chrono::steady_clock::now();
     // GUI requests a reset via an atomic revision. The audio thread alone owns telemetry.
     const auto resetRevision = dspResetRevision.load(std::memory_order_acquire);
-    if (resetRevision != lastDSPResetRevision) {
+    const bool didReset = resetRevision != lastDSPResetRevision;
+    if (didReset) {
         lastDSPResetRevision = resetRevision;
         lastTelemetrySeconds = 0.0;
         performance.reset();
@@ -74,6 +75,9 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         dspSpikeCount.store(0, std::memory_order_relaxed);
         callbackMicroseconds.store(0.f, std::memory_order_relaxed);
     }
+    const auto callbackStart = std::chrono::steady_clock::now();
+    const double resetSeconds = didReset
+        ? std::chrono::duration<double>(callbackStart - resetStart).count() : 0.0;
     juce::ScopedNoDenormals noDenormals;
     const int channels = juce::jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     if (channels < 1) { buffer.clear(); return; }
@@ -191,7 +195,7 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
                        std::chrono::duration<double>(parametersEnd - callbackStart).count(),
                        std::chrono::duration<double>(inputEnd - parametersEnd).count(),
                        std::chrono::duration<double>(riderStart - inputEnd).count(),
-                       canCrossfade);
+                       canCrossfade, resetSeconds);
     averageBlockLoad.store(performance.averagePercent(), std::memory_order_relaxed);
     maximumBlockLoad.store(performance.maximumPercent(), std::memory_order_relaxed);
     rollingPeakLoad.store(performance.rollingPeakPercent(), std::memory_order_relaxed);
