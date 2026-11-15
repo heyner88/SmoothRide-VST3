@@ -256,7 +256,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.4.2  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
+    g.drawText("v0.5.1  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.drawText("DSP AVG " + juce::String(displayedAverageLoad, 2) + "%"
@@ -337,7 +337,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     drawDiagnostic(2, "RIDER STATUS", status, displayedActive ? accent : faint);
 
     // Compact cards leave two rows for user presets and A/B snapshots.
-    constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 70;
+    constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 66;
     const int cardW = (innerWidth - (cols-1)*cardGap) / cols;
     for (int i=0; i<numControls; ++i) {
         const int x = margin + (i%cols)*(cardW+cardGap);
@@ -348,7 +348,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
 }
 
 void SmoothRideAudioProcessorEditor::resized() {
-    constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 70;
+    constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 66;
     const int cardW = (getWidth()-36-(cols-1)*cardGap)/cols;
     for (int i=0; i<numControls; ++i) {
         const int x = 18+(i%cols)*(cardW+cardGap);
@@ -356,18 +356,18 @@ void SmoothRideAudioProcessorEditor::resized() {
         labels[(size_t)i]->setBounds(x+6, y+1, cardW-12, 14);
         sliders[(size_t)i]->setBounds(x+8, y+14, cardW-16, cardH-15);
     }
-    presetLabel.setBounds(22, 490, 155, 23);
-    presets.setBounds(178, 489, 300, 25);
-    presetName.setBounds(489, 489, 244, 25);
-    savePreset.setBounds(739, 489, 71, 25);
-    notice.setBounds(815, 489, 244, 25);
-    userPresetList.setBounds(20, 520, 270, 26);
-    loadPreset.setBounds(298, 520, 77, 26);
-    deletePreset.setBounds(380, 520, 77, 26);
-    captureA.setBounds(485, 520, 85, 26);
-    captureB.setBounds(575, 520, 85, 26);
-    recallA.setBounds(672, 520, 85, 26);
-    recallB.setBounds(762, 520, 85, 26);
+    presetLabel.setBounds(22, 494, 155, 23);
+    presets.setBounds(178, 493, 300, 25);
+    presetName.setBounds(489, 493, 244, 25);
+    savePreset.setBounds(739, 493, 71, 25);
+    notice.setBounds(815, 493, 244, 25);
+    userPresetList.setBounds(20, 525, 270, 26);
+    loadPreset.setBounds(298, 525, 77, 26);
+    deletePreset.setBounds(380, 525, 77, 26);
+    captureA.setBounds(485, 525, 85, 26);
+    captureB.setBounds(575, 525, 85, 26);
+    recallA.setBounds(672, 525, 85, 26);
+    recallB.setBounds(762, 525, 85, 26);
     matchAB.setBounds(20, 559, 128, 25);
     calibrateA.setBounds(160, 557, 80, 27);
     calibrateB.setBounds(248, 557, 80, 27);

@@ -1,6 +1,6 @@
-# SmoothRide v0.5.0
+# SmoothRide v0.5.1
 
-Start with [README-v0.5.0.md](README-v0.5.0.md). This project is built in GitHub Actions on Windows.
+Start with [README-v0.5.1.md](README-v0.5.1.md). This project is built in GitHub Actions on Windows.
 
 # SmoothRide VST3 v0.3.1
 
@@ -46,3 +46,9 @@ See README-v0.3.3.md for compact editor changes.
 
 
 See **README-v0.4.2.md** for comparison features, calibration, and testing.
+
+
+## v0.5.1 UI polish
+
+- Reduced parameter card height slightly and lowered the preset/preset-management rows a few pixels to prevent the preset selector from overlapping the bottom parameter cards.
+- Kept the compact 1080 x 600 fixed-size editor and left the DSP unchanged.
