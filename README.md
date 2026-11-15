@@ -1,3 +1,7 @@
+# SmoothRide v0.5.0
+
+Start with [README-v0.5.0.md](README-v0.5.0.md). This project is built in GitHub Actions on Windows.
+
 # SmoothRide VST3 v0.3.1
 
 See `README-v0.3.1.md` for changes and build instructions.

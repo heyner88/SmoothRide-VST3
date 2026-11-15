@@ -69,7 +69,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     refreshUserPresetList();
 
     for (auto* button : {&savePreset, &loadPreset, &deletePreset,
-                         &captureA, &captureB, &recallA, &recallB}) {
+                         &captureA, &captureB, &recallA, &recallB, &importPreset, &exportPreset}) {
         button->setColour(juce::TextButton::buttonColourId, panel);
         button->setColour(juce::TextButton::textColourOffId, text);
         addAndMakeVisible(*button);
@@ -94,6 +94,45 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
             refreshUserPresetList();
             setNotice("Deleted: " + name);
         } else setNotice("Select a saved preset");
+    };
+    exportPreset.onClick = [this] {
+        const auto selected = userPresetList.getText();
+        if (selected.isEmpty()) { setNotice("Select a preset to export"); return; }
+        const auto initial = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                                .getChildFile(juce::File::createLegalFileName(selected) + ".smoothridepreset");
+        presetFileChooser = std::make_unique<juce::FileChooser>("Export SmoothRide preset", initial,
+                                                                 "*.smoothridepreset");
+        juce::Component::SafePointer<SmoothRideAudioProcessorEditor> safe(this);
+        presetFileChooser->launchAsync(juce::FileBrowserComponent::saveMode
+                                      | juce::FileBrowserComponent::canSelectFiles
+                                      | juce::FileBrowserComponent::warnAboutOverwriting,
+          [safe, selected](const juce::FileChooser& chooser) {
+            if (safe == nullptr) return;
+            auto file = chooser.getResult();
+            if (file == juce::File()) return;
+            if (!file.hasFileExtension(".smoothridepreset")) file = file.withFileExtension(".smoothridepreset");
+            juce::String error;
+            safe->setNotice(safe->processor.exportUserPreset(selected, file, error)
+                            ? "Exported: " + selected : error);
+          });
+    };
+    importPreset.onClick = [this] {
+        presetFileChooser = std::make_unique<juce::FileChooser>("Import SmoothRide preset",
+                        juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+                        "*.smoothridepreset");
+        juce::Component::SafePointer<SmoothRideAudioProcessorEditor> safe(this);
+        presetFileChooser->launchAsync(juce::FileBrowserComponent::openMode
+                                      | juce::FileBrowserComponent::canSelectFiles,
+          [safe](const juce::FileChooser& chooser) {
+            if (safe == nullptr) return;
+            const auto file = chooser.getResult();
+            if (file == juce::File()) return;
+            juce::String error;
+            if (safe->processor.importUserPreset(file, error)) {
+                safe->refreshUserPresetList();
+                safe->setNotice("Preset imported");
+            } else safe->setNotice(error);
+          });
     };
     captureA.onClick = [this] { processor.captureAB(false); setNotice("Stored snapshot A"); };
     captureB.onClick = [this] { processor.captureAB(true); setNotice("Stored snapshot B"); };
@@ -333,4 +372,6 @@ void SmoothRideAudioProcessorEditor::resized() {
     calibrateA.setBounds(160, 557, 80, 27);
     calibrateB.setBounds(248, 557, 80, 27);
     comparisonInfo.setBounds(347, 556, 420, 28);
+    importPreset.setBounds(784, 557, 125, 27);
+    exportPreset.setBounds(918, 557, 125, 27);
 }

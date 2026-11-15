@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(SmoothRide VERSION 0.4.2 LANGUAGES C CXX)
+project(SmoothRide VERSION 0.5.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Clone JUCE next to this CMakeLists.txt: git clone --depth 1 --branch 8.0.12 https://github.com/juce-framework/JUCE.git JUCE
@@ -24,3 +24,12 @@ juce_generate_juce_header(SmoothRide)
 target_sources(SmoothRide PRIVATE Source/PluginProcessor.cpp Source/PluginProcessor.h Source/GainRider.h Source/PerformanceTelemetry.h Source/PluginEditor.cpp Source/PluginEditor.h)
 target_compile_definitions(SmoothRide PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 target_link_libraries(SmoothRide PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_recommended_config_flags juce::juce_recommended_warning_flags juce::juce_recommended_lto_flags)
+
+# Standalone, dependency-free DSP regression tests. Enabled in CI via CTest.
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(SmoothRideDSPTest tests/dsp_test.cpp)
+    add_executable(SmoothRidePerformanceTest tests/performance_test.cpp)
+    add_test(NAME DSPRegression COMMAND SmoothRideDSPTest)
+    add_test(NAME PerformanceTelemetry COMMAND SmoothRidePerformanceTest)
+endif()

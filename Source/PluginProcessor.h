@@ -35,6 +35,9 @@ public:
     bool saveUserPreset(const juce::String& name);
     bool loadUserPreset(const juce::String& name);
     bool deleteUserPreset(const juce::String& name);
+    // Portable .smoothridepreset XML; functions run only on the message thread.
+    bool exportUserPreset(const juce::String& name, const juce::File& file, juce::String& error) const;
+    bool importUserPreset(const juce::File& file, juce::String& error);
     void captureAB(bool slotB);
     bool recallAB(bool slotB);
     bool hasAB(bool slotB) const;

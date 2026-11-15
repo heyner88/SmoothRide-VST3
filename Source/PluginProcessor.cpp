@@ -255,6 +255,71 @@ bool SmoothRideAudioProcessor::deleteUserPreset(const juce::String& name) {
     return true;
 }
 
+bool SmoothRideAudioProcessor::exportUserPreset(const juce::String& name,
+                                                  const juce::File& file,
+                                                  juce::String& error) const {
+    auto node = findNamed(apvts.state.getChildWithName(userBankID), presetID, name);
+    if (!node.isValid()) { error = "Select a saved preset first"; return false; }
+    juce::XmlElement xml("SmoothRidePreset");
+    xml.setAttribute("version", 1);
+    xml.setAttribute("name", name);
+    for (const auto* id : snapshotIDs) {
+        const juce::Identifier key(id);
+        if (!node.hasProperty(key)) { error = "Preset is missing a parameter"; return false; }
+        xml.setAttribute(juce::String(id), (double)(float)node.getProperty(key));
+    }
+    if (!file.replaceWithText(xml.toString(), false, false, "\n")) {
+        error = "Could not write preset file"; return false;
+    }
+    return true;
+}
+
+bool SmoothRideAudioProcessor::importUserPreset(const juce::File& file,
+                                                  juce::String& error) {
+    if (!file.existsAsFile() || file.getSize() > 65536) {
+        error = "Missing or oversized preset file"; return false;
+    }
+    juce::XmlDocument doc(file);
+    auto xml = doc.getDocumentElement();
+    if (!xml || !xml->hasTagName("SmoothRidePreset") || xml->getIntAttribute("version", -1) != 1) {
+        error = "Unsupported preset format"; return false;
+    }
+    const auto name = xml->getStringAttribute("name").trim();
+    if (name.isEmpty() || name.length() > 40) {
+        error = "Invalid preset name"; return false;
+    }
+    auto bank = ensureUserBank(apvts.state);
+    if (findNamed(bank, presetID, name).isValid()) {
+        error = "Name already exists; rename or delete it first"; return false;
+    }
+    Snapshot values {};
+    for (size_t i = 0; i < snapshotIDs.size(); ++i) {
+        const juce::String id(snapshotIDs[i]);
+        if (!xml->hasAttribute(id)) {
+            error = "Missing parameter: " + id; return false;
+        }
+        const auto raw = xml->getStringAttribute(id);
+        if (raw.isEmpty() || !raw.containsOnly("-+.0123456789eE")) {
+            error = "Invalid numeric parameter: " + id; return false;
+        }
+        const double value = raw.getDoubleValue();
+        const auto* parameter = dynamic_cast<juce::AudioParameterFloat*>(apvts.getParameter(id));
+        if (!parameter || !std::isfinite(value)) {
+            error = "Invalid parameter value: " + id; return false;
+        }
+        const auto range = parameter->range;
+        if (value < range.start || value > range.end) {
+            error = "Out-of-range parameter: " + id; return false;
+        }
+        values[i] = (float)value;
+    }
+    auto node = juce::ValueTree(presetID);
+    node.setProperty("name", name, nullptr);
+    saveSnapshot(node, values);
+    bank.addChild(node, -1, nullptr);
+    return true;
+}
+
 void SmoothRideAudioProcessor::captureAB(bool slotB) {
     auto bank = ensureUserBank(apvts.state);
     const juce::String name = slotB ? "B" : "A";
