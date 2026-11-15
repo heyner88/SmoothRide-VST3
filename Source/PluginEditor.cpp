@@ -54,6 +54,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     };
     addAndMakeVisible(presets);
     gainHistory.fill(0.0f);
+    rmsHistory.fill(-100.0f);
     // Fixed compact editor: never resize host-owned VST3 windows interactively.
     setResizable(false, false);
     setSize(1080, 600);
@@ -71,9 +72,13 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedBlockRmsDb = ampDb(processor.getInputBlockRms());
     displayedRequestedDb = processor.getRequestedRideDb();
     displayedActive = processor.getRiderActive();
+    displayedAverageLoad = processor.getAverageBlockLoadPercent();
+    displayedPeakLoad = processor.getMaximumBlockLoadPercent();
+    displayedCallbackUs = processor.getLastCallbackMicroseconds();
     gainHistory[(size_t)historyPosition] = displayedRideDb;
+    rmsHistory[(size_t)historyPosition] = displayedRmsDb;
     historyPosition = (historyPosition + 1) % (int)gainHistory.size();
-    repaint(juce::Rectangle<int>(18, 56, getWidth()-36, 218));
+    repaint(juce::Rectangle<int>(18, 8, getWidth()-36, 266));
 }
 
 void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
@@ -122,7 +127,13 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.3.3  |  STEREO-LINKED GAIN RIDER", 320, 10, right-320, 30, juce::Justification::centredRight);
+    g.drawText("v0.4.0  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
+    g.setColour(faint);
+    g.setFont(juce::Font(juce::FontOptions(12.0f)));
+    g.drawText("DSP AVG " + juce::String(displayedAverageLoad, 2) + "%"
+               + "   PEAK " + juce::String(displayedPeakLoad, 2) + "%"
+               + "   LAST " + juce::String(displayedCallbackUs, 0) + " us"
+               + "   LATENCY 0 samples", 273, 12, 470, 24, juce::Justification::centredLeft);
 
     // Wide, single-row peak meters: all coordinates stay inside 1080 x 600.
     g.setColour(panel);
@@ -141,7 +152,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(chart, 8.f);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("GAIN RIDING HISTORY  |  24 s", 31, 123, 350, 17, juce::Justification::centredLeft);
+    g.drawText("24 s  |  RIDE (+/-12 dB)  /  RMS (-100..0 dBFS)", 31, 123, 565, 17, juce::Justification::centredLeft);
     g.setColour(accent);
     g.drawText((displayedRideDb >= 0.f ? "+" : "") + juce::String(displayedRideDb, 1) + " dB",
                right-148, 123, 132, 17, juce::Justification::centredRight);
@@ -157,6 +168,17 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     }
     g.setColour(accent);
     g.strokePath(path, juce::PathStrokeType(2.0f));
+    // Blue trace: detector RMS, separately scaled from gain to -100..0 dBFS.
+    juce::Path rmsPath;
+    for (size_t k=0; k<rmsHistory.size(); ++k) {
+        const auto idx = (historyPosition + (int)k) % (int)rmsHistory.size();
+        const float x = plot.getX() + (float)k / (float)(rmsHistory.size()-1) * plot.getWidth();
+        const float normalized = juce::jlimit(0.f, 1.f, (rmsHistory[(size_t)idx] + 100.f) / 100.f);
+        const float y = plot.getBottom() - normalized * plot.getHeight();
+        if (k == 0) rmsPath.startNewSubPath(x, y); else rmsPath.lineTo(x, y);
+    }
+    g.setColour(juce::Colour(0xff68a7ff));
+    g.strokePath(rmsPath, juce::PathStrokeType(1.5f));
 
     // Diagnostics are read-only. Never alter DSP state in the editor.
     g.setColour(panel);

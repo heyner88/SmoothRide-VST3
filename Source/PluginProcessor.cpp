@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <chrono>
 
 SmoothRideAudioProcessor::SmoothRideAudioProcessor()
 : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
@@ -25,13 +26,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout SmoothRideAudioProcessor::cr
     add("lowProtect", "Soft Floor (0=Off, 1=On)", 0.0f, 1.0f, 0.0f, 1.0f);
     return layout;
 }
-void SmoothRideAudioProcessor::prepareToPlay(double sr, int) { rider.prepare(sr); setLatencySamples(0); }
+void SmoothRideAudioProcessor::prepareToPlay(double sr, int) {
+    currentSampleRate = sr > 0.0 ? sr : 48000.0;
+    rider.prepare(currentSampleRate);
+    performance.reset();
+    averageBlockLoad.store(0.0f, std::memory_order_relaxed);
+    maximumBlockLoad.store(0.0f, std::memory_order_relaxed);
+    callbackMicroseconds.store(0.0f, std::memory_order_relaxed);
+    setLatencySamples(0);
+}
 bool SmoothRideAudioProcessor::isBusesLayoutSupported(const BusesLayout& l) const {
     const auto input = l.getMainInputChannelSet();
     return (input == juce::AudioChannelSet::mono() || input == juce::AudioChannelSet::stereo())
            && l.getMainOutputChannelSet() == input;
 }
 void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
+    const auto callbackStart = std::chrono::steady_clock::now();
     juce::ScopedNoDenormals noDenormals;
     const int channels = juce::jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     if (channels < 1) { buffer.clear(); return; }
@@ -69,6 +79,11 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     detectedRmsDb.store(rider.currentDetectedRmsDb(), std::memory_order_relaxed);
     requestedRideDb.store(rider.currentRequestedRideDb(), std::memory_order_relaxed);
     riderActive.store(rider.isRidingActive(), std::memory_order_relaxed);
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - callbackStart).count();
+    performance.record(seconds, buffer.getNumSamples(), currentSampleRate);
+    averageBlockLoad.store(performance.averagePercent(), std::memory_order_relaxed);
+    maximumBlockLoad.store(performance.maximumPercent(), std::memory_order_relaxed);
+    callbackMicroseconds.store(performance.callbackMicroseconds(), std::memory_order_relaxed);
 }
 juce::AudioProcessorEditor* SmoothRideAudioProcessor::createEditor() {
     return new SmoothRideAudioProcessorEditor(*this);

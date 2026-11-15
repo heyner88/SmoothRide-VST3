@@ -26,11 +26,13 @@ private:
     juce::ComboBox presets;
     juce::Label presetLabel;
     std::array<float, 240> gainHistory {};
+    std::array<float, 240> rmsHistory {};
     int historyPosition = 0;
     float displayedInputDb = -90.0f, displayedOutputDb = -90.0f;
     float displayedRideDb = 0.0f, displayedPeakReductionDb = 0.0f;
     float displayedRmsDb = -160.0f, displayedRequestedDb = 0.0f;
     bool displayedActive = false;
     float displayedBlockRmsDb = -90.0f;
+    float displayedAverageLoad = 0.0f, displayedPeakLoad = 0.0f, displayedCallbackUs = 0.0f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessorEditor)
 };

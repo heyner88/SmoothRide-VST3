@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "GainRider.h"
+#include "PerformanceTelemetry.h"
 #include <atomic>
 
 class SmoothRideAudioProcessor final : public juce::AudioProcessor {
@@ -34,11 +35,17 @@ public:
     float getDetectedRmsDb() const noexcept { return detectedRmsDb.load(std::memory_order_relaxed); }
     float getRequestedRideDb() const noexcept { return requestedRideDb.load(std::memory_order_relaxed); }
     bool getRiderActive() const noexcept { return riderActive.load(std::memory_order_relaxed); }
+    float getAverageBlockLoadPercent() const noexcept { return averageBlockLoad.load(std::memory_order_relaxed); }
+    float getMaximumBlockLoadPercent() const noexcept { return maximumBlockLoad.load(std::memory_order_relaxed); }
+    float getLastCallbackMicroseconds() const noexcept { return callbackMicroseconds.load(std::memory_order_relaxed); }
     // Receives no allocations, locks or GUI callbacks on the audio thread.
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     smoothride::GainRider rider;
+    smoothride::PerformanceTelemetry performance;
+    double currentSampleRate = 48000.0;
+    std::atomic<float> averageBlockLoad {0.0f}, maximumBlockLoad {0.0f}, callbackMicroseconds {0.0f};
     std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f}, inputBlockRms {0.0f};
     std::atomic<float> rideDb {0.0f}, limiterReductionDb {0.0f};
     std::atomic<float> detectedRmsDb {-160.0f}, requestedRideDb {0.0f};
