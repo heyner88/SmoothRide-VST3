@@ -21,6 +21,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout SmoothRideAudioProcessor::cr
     add("mix", "Mix (%)", 0.0f, 100.0f, 65.0f, 1.0f);
     add("output", "Output Gain (dB)", -12.0f, 12.0f, 6.0f, 0.1f);
     add("ceiling", "Safety Ceiling (dBFS)", -12.0f, -0.1f, -1.0f, 0.1f);
+    add("gateHyst", "Floor Hysteresis (dB)", 0.0f, 12.0f, 0.0f, 0.5f);
+    add("lowProtect", "Soft Floor (0=Off, 1=On)", 0.0f, 1.0f, 0.0f, 1.0f);
     return layout;
 }
 void SmoothRideAudioProcessor::prepareToPlay(double sr, int) { rider.prepare(sr); setLatencySamples(0); }
@@ -39,9 +41,20 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     settings.targetDb = p("target"); settings.floorDb = p("floor"); settings.maxBoostDb = p("range"); settings.maxCutDb = p("maxCut");
     settings.upMs = p("speed"); settings.downMs = p("downSpeed"); settings.mix = p("mix") / 100.0f; settings.outputDb = p("output");
     settings.ceilingDb = p("ceiling");
+    settings.gateHysteresisDb = p("gateHyst");
+    settings.lowLevelProtect = p("lowProtect");
     float inPeak = 0.0f;
-    for (int c = 0; c < channels; ++c)
+    double inputPower = 0.0;
+    for (int c = 0; c < channels; ++c) {
         inPeak = juce::jmax(inPeak, buffer.getMagnitude(c, 0, buffer.getNumSamples()));
+        const float* samples = buffer.getReadPointer(c);
+        for (int i = 0; i < buffer.getNumSamples(); ++i) {
+            const double x = std::isfinite(samples[i]) ? samples[i] : 0.0;
+            inputPower += x*x;
+        }
+    }
+    const int count = channels * buffer.getNumSamples();
+    const float blockRms = count > 0 ? (float) std::sqrt(inputPower / count) : 0.0f;
     rider.setSettings(settings);
     rider.process(buffer.getWritePointer(0), channels == 2 ? buffer.getWritePointer(1) : nullptr,
                   buffer.getNumSamples(), channels == 2);
@@ -49,6 +62,7 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     for (int c = 0; c < channels; ++c)
         outPeak = juce::jmax(outPeak, buffer.getMagnitude(c, 0, buffer.getNumSamples()));
     inputPeak.store(inPeak, std::memory_order_relaxed);
+    inputBlockRms.store(blockRms, std::memory_order_relaxed);
     outputPeak.store(outPeak, std::memory_order_relaxed);
     rideDb.store(rider.currentRideDb(), std::memory_order_relaxed);
     limiterReductionDb.store(rider.currentPeakReductionDb(), std::memory_order_relaxed);

@@ -33,3 +33,6 @@ This is an **experimental VST3 source release**, not an installed binary. The pl
 5. Test at reduced Windows volume and confirm your v0.2 settings before using presets.
 
 The code has not been compiled with JUCE here; the standalone DSP regression tests pass. The GitHub Actions Windows compilation is the next validation step.
+
+
+See README-v0.3.2.md for changes and compatibility.

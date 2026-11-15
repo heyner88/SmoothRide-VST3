@@ -14,6 +14,8 @@ struct Settings {
     float mix = 0.65f;           // dry/wet blend
     float outputDb = 6.0f;       // constant makeup gain
     float ceilingDb = -1.0f;     // instantaneous sample-peak ceiling, NOT true-peak
+    float gateHysteresisDb = 0.0f; // 0 preserves v0.3.1 threshold behavior
+    float lowLevelProtect = 0.0f; // 0 preserves v0.3.1; 1 applies 12 dB soft floor
 };
 class GainRider {
 public:
@@ -37,6 +39,8 @@ public:
         const double peakRelease = coeff(100.0);
         const double target = settings.targetDb;
         const double floor = settings.floorDb;
+        const double hysteresis = std::clamp((double)settings.gateHysteresisDb, 0.0, 12.0);
+        const bool protect = settings.lowLevelProtect >= 0.5f;
         const double maxBoost = std::max(0.0, (double)settings.maxBoostDb);
         const double maxCut = std::max(0.0, (double)settings.maxCutDb);
         const double mix = std::clamp((double)settings.mix, 0.0, 1.0);
@@ -49,8 +53,17 @@ public:
             power = detect*power + (1.0-detect)*samplePower;
             const double detectedDb = 10.0*std::log10(std::max(1.0e-16, power));
             // Threshold gate keeps silence/noise from being amplified.
-            const bool active = detectedDb > floor;
-            const double desired = active ? std::clamp(target - detectedDb, -maxCut, maxBoost) : 0.0;
+            // With hysteresis disabled, this reproduces the original v0.3.1 comparison.
+            // Enabled: activate above floor + hyst/2; remain active down to floor - hyst/2.
+            const bool active = hysteresis <= 0.0
+                ? detectedDb > floor
+                : (ridingActive ? detectedDb > floor - hysteresis*0.5
+                                : detectedDb > floor + hysteresis*0.5);
+            double desired = active ? std::clamp(target - detectedDb, -maxCut, maxBoost) : 0.0;
+            // Optional soft floor: ramp positive gain from zero to full over 12 dB.
+            // Below floor there is still no automatic positive boost.
+            if (protect && desired > 0.0)
+                desired *= std::clamp((detectedDb - floor)/12.0, 0.0, 1.0);
             detectedRmsDb = detectedDb;
             requestedRideDb = desired;
             ridingActive = active;

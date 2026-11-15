@@ -26,6 +26,7 @@ public:
     void setStateInformation(const void*, int) override;
     juce::AudioProcessorValueTreeState apvts;
     // Single audio-thread writer, GUI-thread readers. Telemetry does not affect DSP.
+    float getInputBlockRms() const noexcept { return inputBlockRms.load(std::memory_order_relaxed); }
     float getInputPeak() const noexcept { return inputPeak.load(std::memory_order_relaxed); }
     float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
     float getRideDb() const noexcept { return rideDb.load(std::memory_order_relaxed); }
@@ -38,7 +39,7 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     smoothride::GainRider rider;
-    std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f};
+    std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f}, inputBlockRms {0.0f};
     std::atomic<float> rideDb {0.0f}, limiterReductionDb {0.0f};
     std::atomic<float> detectedRmsDb {-160.0f}, requestedRideDb {0.0f};
     std::atomic<bool> riderActive {false};

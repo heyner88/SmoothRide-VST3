@@ -17,9 +17,9 @@ private:
                    const juce::String& caption) const;
     void applyPreset(int preset);
     SmoothRideAudioProcessor& processor;
-    static constexpr int numControls = 9;
+    static constexpr int numControls = 11;
     std::array<juce::String, numControls> ids {{ "target", "floor", "range", "maxCut", "speed",
-                                                   "downSpeed", "mix", "output", "ceiling" }};
+                                                   "downSpeed", "mix", "output", "ceiling", "gateHyst", "lowProtect" }};
     std::array<std::unique_ptr<juce::Slider>, numControls> sliders;
     std::array<std::unique_ptr<juce::Label>, numControls> labels;
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, numControls> attachments;
@@ -31,5 +31,6 @@ private:
     float displayedRideDb = 0.0f, displayedPeakReductionDb = 0.0f;
     float displayedRmsDb = -160.0f, displayedRequestedDb = 0.0f;
     bool displayedActive = false;
+    float displayedBlockRmsDb = -90.0f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessorEditor)
 };

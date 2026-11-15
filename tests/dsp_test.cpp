@@ -55,4 +55,28 @@ int main() {
     assert(!rider.isRidingActive());
     assert(rider.currentRequestedRideDb() == 0.0f);
     std::cout<<"PASS below-floor status\n";
+    // Optional soft-floor is off by default and limits boosts near the gate when enabled.
+    GainRider baseline, protectedRider;
+    baseline.prepare(48000); protectedRider.prepare(48000);
+    Settings a; a.floorDb=-60.0f; a.targetDb=-12.0f; a.maxBoostDb=6.0f;
+    a.upMs=100.0f; a.downMs=100.0f; a.mix=1.0f; a.outputDb=0.0f;
+    Settings b=a; b.lowLevelProtect=1.0f;
+    baseline.setSettings(a); protectedRider.setSettings(b);
+    auto nearFloor=sine(48000*4,0.002f); // approx -60 dB RMS
+    auto nearFloor2=nearFloor;
+    baseline.process(nearFloor.data(),nullptr,(int)nearFloor.size(),false);
+    protectedRider.process(nearFloor2.data(),nullptr,(int)nearFloor2.size(),false);
+    assert(protectedRider.currentRideDb() < baseline.currentRideDb());
+    std::cout<<"PASS soft floor reduces low-level boost\n";
+    GainRider gated;
+    gated.prepare(48000);
+    Settings h=a; h.gateHysteresisDb=4.0f; h.floorDb=-40.0f;
+    gated.setSettings(h);
+    auto above=sine(48000*2,0.025f); // above -38 dB RMS
+    gated.process(above.data(),nullptr,(int)above.size(),false);
+    assert(gated.isRidingActive());
+    auto middle=sine(48000*2,0.008f); // -43 dB RMS; below lower hysteresis edge (-42)
+    gated.process(middle.data(),nullptr,(int)middle.size(),false);
+    assert(!gated.isRidingActive());
+    std::cout<<"PASS hysteresis exit threshold\n";
 }

@@ -13,7 +13,7 @@ float ampDb(float a) noexcept {
 SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioProcessor& p)
     : juce::AudioProcessorEditor(&p), processor(p) {
     const std::array<juce::String, numControls> names {{ "TARGET RMS", "FLOOR", "MAX BOOST", "MAX CUT",
-         "GAIN UP", "GAIN DOWN", "MIX", "OUTPUT", "CEILING" }};
+         "GAIN UP", "GAIN DOWN", "MIX", "OUTPUT", "CEILING", "FLOOR HYST", "SOFT FLOOR" }};
     for (int i = 0; i < numControls; ++i) {
         sliders[i] = std::make_unique<juce::Slider>();
         auto& slider = *sliders[i];
@@ -26,6 +26,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         slider.setColour(juce::Slider::textBoxBackgroundColourId, panel);
         if (ids[i] == "speed" || ids[i] == "downSpeed") slider.setTextValueSuffix(" ms");
+        else if (ids[i] == "lowProtect") slider.setTextValueSuffix(" (0=OFF, 1=ON)");
         else if (ids[i] == "mix") slider.setTextValueSuffix(" %");
         else slider.setTextValueSuffix(" dB");
         addAndMakeVisible(slider);
@@ -53,7 +54,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     };
     addAndMakeVisible(presets);
     gainHistory.fill(0.0f);
-    setSize(900, 890);
+    setSize(900, 1090);
     startTimerHz(10);
 }
 
@@ -65,6 +66,7 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedRideDb = processor.getRideDb();
     displayedPeakReductionDb = processor.getLimiterReductionDb();
     displayedRmsDb = processor.getDetectedRmsDb();
+    displayedBlockRmsDb = ampDb(processor.getInputBlockRms());
     displayedRequestedDb = processor.getRequestedRideDb();
     displayedActive = processor.getRiderActive();
     gainHistory[(size_t)historyPosition] = displayedRideDb;
@@ -75,10 +77,10 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
 void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
     // Optional parameter changes on the UI thread, never the audio thread.
     // The baseline exactly matches the v0.2 defaults; all presets retain safe limited riding.
-    const std::array<float, 9> baseline {{-12.f, -60.f, 6.f, 3.f, 3000.f, 650.f, 65.f, 6.f, -1.f}};
-    const std::array<float, 9> music    {{-12.f, -60.f, 4.f, 2.f, 4000.f, 900.f, 45.f, 6.f, -1.f}};
-    const std::array<float, 9> streams  {{-12.f, -60.f, 6.f, 3.f, 3000.f, 650.f, 65.f, 6.f, -1.f}};
-    const std::array<float, 9> movies   {{-14.f, -60.f, 3.f, 2.f, 5000.f, 1100.f, 40.f, 4.f, -1.f}};
+    const std::array<float, 11> baseline {{-12.f, -60.f, 6.f, 3.f, 3000.f, 650.f, 65.f, 6.f, -1.f, 0.f, 0.f}};
+    const std::array<float, 11> music    {{-12.f, -60.f, 4.f, 2.f, 4000.f, 900.f, 45.f, 6.f, -1.f, 0.f, 0.f}};
+    const std::array<float, 11> streams  {{-12.f, -60.f, 6.f, 3.f, 3000.f, 650.f, 65.f, 6.f, -1.f, 0.f, 0.f}};
+    const std::array<float, 11> movies   {{-14.f, -60.f, 3.f, 2.f, 5000.f, 1100.f, 40.f, 4.f, -1.f, 0.f, 0.f}};
     const auto& values = presetId == 3 ? music : presetId == 4 ? streams : presetId == 5 ? movies : baseline;
     for (int i = 0; i < numControls; ++i) {
         if (auto* param = processor.apvts.getParameter(ids[i])) {
@@ -115,7 +117,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", top.removeFromLeft(240).toNearestInt(), juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText("v0.3.1  |  STEREO-LINKED GAIN RIDER", top.toNearestInt(), juce::Justification::centredRight);
+    g.drawText("v0.3.2  |  STEREO-LINKED GAIN RIDER", top.toNearestInt(), juce::Justification::centredRight);
 
     const auto meterArea = juce::Rectangle<float>(20, 67, (float)getWidth()-40, 90);
     g.setColour(panel);
@@ -166,7 +168,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
         g.setFont(juce::Font(juce::FontOptions(19.0f).withStyle("bold")));
         g.drawText(value, x, 318, (int)columnWidth, 28, juce::Justification::centredLeft);
     };
-    drawDiagnostic(0, "DETECTED RMS", juce::String(displayedRmsDb, 1) + " dBFS", text);
+    drawDiagnostic(0, "DETECTOR / BLOCK RMS", juce::String(displayedRmsDb, 1) + " / " + juce::String(displayedBlockRmsDb, 1) + " dBFS", text);
     drawDiagnostic(1, "REQUESTED RIDE", (displayedRequestedDb >= 0.0f ? "+" : "")
                    + juce::String(displayedRequestedDb, 1) + " dB", text);
     const auto* floorParam = processor.apvts.getRawParameterValue("floor");
@@ -192,8 +194,8 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     }
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("Presets change the nine controls above. Current values are saved by the host.",
-               20, 856, getWidth()-40, 22, juce::Justification::centred);
+    g.drawText("Presets change the eleven controls above. Current values are saved by the host.",
+               20, 1053, getWidth()-40, 22, juce::Justification::centred);
 }
 
 void SmoothRideAudioProcessorEditor::resized() {
@@ -204,6 +206,6 @@ void SmoothRideAudioProcessorEditor::resized() {
         labels[(size_t)i]->setBounds(x+10, y+5, cardW-20, 22);
         sliders[(size_t)i]->setBounds(x+20, y+26, cardW-40, cardH-30);
     }
-    presetLabel.setBounds(28, 839, 205, 23);
-    presets.setBounds(235, 831, getWidth()-263, 34);
+    presetLabel.setBounds(28, 1017, 205, 23);
+    presets.setBounds(235, 1009, getWidth()-263, 34);
 }
