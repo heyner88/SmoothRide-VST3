@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
 
 SmoothRideAudioProcessor::SmoothRideAudioProcessor()
 : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
@@ -38,12 +39,22 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     settings.targetDb = p("target"); settings.floorDb = p("floor"); settings.maxBoostDb = p("range"); settings.maxCutDb = p("maxCut");
     settings.upMs = p("speed"); settings.downMs = p("downSpeed"); settings.mix = p("mix") / 100.0f; settings.outputDb = p("output");
     settings.ceilingDb = p("ceiling");
+    float inPeak = 0.0f;
+    for (int c = 0; c < channels; ++c)
+        inPeak = juce::jmax(inPeak, buffer.getMagnitude(c, 0, buffer.getNumSamples()));
     rider.setSettings(settings);
     rider.process(buffer.getWritePointer(0), channels == 2 ? buffer.getWritePointer(1) : nullptr,
                   buffer.getNumSamples(), channels == 2);
+    float outPeak = 0.0f;
+    for (int c = 0; c < channels; ++c)
+        outPeak = juce::jmax(outPeak, buffer.getMagnitude(c, 0, buffer.getNumSamples()));
+    inputPeak.store(inPeak, std::memory_order_relaxed);
+    outputPeak.store(outPeak, std::memory_order_relaxed);
+    rideDb.store(rider.currentRideDb(), std::memory_order_relaxed);
+    limiterReductionDb.store(rider.currentPeakReductionDb(), std::memory_order_relaxed);
 }
 juce::AudioProcessorEditor* SmoothRideAudioProcessor::createEditor() {
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new SmoothRideAudioProcessorEditor(*this);
 }
 void SmoothRideAudioProcessor::getStateInformation(juce::MemoryBlock& b) {
     if (auto xml = apvts.copyState().createXml()) copyXmlToBinary(*xml, b);

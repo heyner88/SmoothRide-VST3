@@ -1,70 +1,31 @@
-# SmoothRide v0.2
+# SmoothRide v0.3 — live monitoring and custom UI
 
-**Read [README-v0.2.md](README-v0.2.md) for updated controls, presets, safety notes, and compatibility guidance.** The original v0.1 README follows for historical context.
+This is an **experimental VST3 source release**, not an installed binary. The plugin is intended for EqualizerAPO-XT on Windows x64.
 
----
+## Changes in v0.3
 
-# SmoothRide v0.1 — original VST3 general-purpose stereo gain rider
+- Original v0.2 gain riding engine **unchanged** (`Source/GainRider.h` byte-for-byte identical).
+- Custom JUCE editor with nine parameter knobs, linked via `AudioProcessorValueTreeState` attachments.
+- Live input and output **sample peak** meters (dBFS), current gain-riding adjustment (dB), and instantaneous sample-peak safety attenuation.
+- Gain history of the last approximately 24 seconds **while the editor is open** (10 readings per second). History is not saved.
+- Optional starting presets: v0.2 Baseline, Music (subtle), Streams (controlled), Movies (wider dynamics). Choosing a preset changes parameter values; no automatic content detection.
+- The plugin continues to save its nine parameters in host state and uses the **same parameter identifiers** as v0.2 for compatibility.
 
-**Prototype, not a tested Windows binary.** Made for EqualizerAPO-XT testing. No W.A. Production code or assets used.
+### Important limitations
 
-## Goals
-A musical, slow RMS gain rider with *bounded* gain adjustments, stereo linking, automatic silence detection, dry/wet blend and output make-up gain. Default controls resemble the workflow you liked in OutlawCM, but the algorithm is original and **will not sound identical**.
+- Input/output meters use audio-block sample peaks, **not true peaks** and not LUFS; the meters may miss momentary peaks between editor refreshes.
+- The safety ceiling is a zero-lookahead **sample-peak clamp** in v0.2 DSP, not a true-peak brickwall limiter. Keep your preferred final limiter if appropriate.
+- Meters and graph are observational only, not part of the audio DSP.
+- SmoothRide is not a vocal isolator; it rides overall program loudness. Presets are experimental.
+- Replacing a VST3 bundle while loaded can cause crashes. Close all audio apps/XT editors first, back up v0.2, and restart audio applications after installation.
+- Compiled with a JUCE 8 dependency downloaded in GitHub Actions; JUCE licensing conditions apply for redistribution.
 
-| Parameter | Default | Meaning |
-|---|---:|---|
-| Target RMS | -15 dB | Relative gain target, not LUFS |
-| Floor | -60 dB | Don't increase silence/background noise |
-| Range | +/-6 dB | Maximum internal gain ride |
-| Speed | 1800 ms | Ride smoothing time constant |
-| Mix | 65% | Blend ridden signal with dry signal |
-| Output | +6 dB | Final makeup, before sample peak safety |
-| Safety ceiling | -1 dBFS | Stereo-linked sample-peak protection (NOT true peak) |
+## Build with GitHub Actions
 
-## Windows build
-Requirements: Visual Studio 2022 Desktop development with C++, Git, CMake 3.22+, internet to download JUCE. JUCE 8 uses AGPLv3 or a commercial license; review licensing before distribution of a JUCE-based plugin.
+1. In your existing repository, replace the `Source/` folder, `CMakeLists.txt`, and this README. Keep `.github/workflows/build-windows.yml` in the repository root.
+2. Make sure the project root directly contains `CMakeLists.txt`; do not upload the enclosing `SmoothRideVST3-v0.3` folder as another nesting level.
+3. Commit changes to `main`. Navigate to **Actions > Build SmoothRide VST3 (Windows)** and inspect the run.
+4. On success, download the `SmoothRide-Windows-x64-VST3-...` artifact, extract it, and copy the complete `.vst3` bundle to `C:\Program Files\Common Files\VST3\`.
+5. Test at reduced Windows volume and confirm your v0.2 settings before using presets.
 
-In PowerShell, from this directory:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\build-windows.ps1
-```
-
-Or manually:
-
-```powershell
-git clone --depth 1 --branch 8.0.12 https://github.com/juce-framework/JUCE.git JUCE
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release --target SmoothRide_VST3
-```
-
-Locate `SmoothRide.vst3` under `build/SmoothRide_artefacts/Release/VST3/` and copy the **whole VST3 bundle** into `C:\Program Files\Common Files\VST3\` (admin privileges may be required). Restart or rescan EqualizerAPO-XT. The editor uses JUCE's generic parameter UI for now.
-
-## Safe first test
-1. Backup your XT config and turn down Windows output volume.
-2. Disable all other riders, normalizers and compressors. Keep LoudMax bypassed for the initial test.
-3. Add SmoothRide after EQ/MSED and before any optional final limiter.
-4. Start with **Output 0 dB, Mix 50%, Range +/-3 dB**, Target -15 dB, Floor -60 dB, Speed 1800 ms, Ceiling -1 dBFS.
-5. Compare bypass and enabled on a known music track. Gradually increase Output only as needed; monitor peak safety limiting and listen for pumping.
-6. Save your original OutlawCM settings so you can roll back easily.
-
-## Current limitations
-- Native Windows/XT host compatibility **not yet verified**; build and live tests are required.
-- No true-peak/intersample limiting; this is a zero-lookahead sample-peak ceiling, which can distort transients. External true-peak limiter recommended for critical work.
-- No LUFS metering, no UI gain-reduction meter, no per-track normalization.
-- Stereo/mono only, RMS detector fixed at 250 ms. Startup levels may shift until the detector settles.
-- Parameters are atomic at block boundaries via JUCE APVTS. No allocation or locking in the DSP sample loop.
-- This is a proof of concept, not a drop-in replacement for proprietary Outlaw.
-
-## Standalone DSP smoke test (Linux/macOS/MinGW)
-
-```bash
-g++ -std=c++17 -O2 tests/dsp_test.cpp -o dsp_test && ./dsp_test
-```
-
-## Build automatically with GitHub Actions
-
-Upload all project files including the hidden `.github/workflows/build-windows.yml` file to a repository with a `main` branch. In GitHub, open **Actions** → **Build SmoothRide VST3 (Windows)** → **Run workflow**. Once the run succeeds, download the `SmoothRide-Windows-x64-VST3` artifact. Extract it and preserve the `.vst3` bundle directory structure when installing into `C:\Program Files\Common Files\VST3\`.
-
-The workflow uses a hosted Windows 2022 runner, Visual Studio 2022, CMake, JUCE 8.0.12 and uploads the VST3 bundle. This workflow and the resulting VST3 have not yet been validated in a GitHub-hosted build or in EqualizerAPO-XT. If the build fails, inspect the Actions logs; it may require source fixes.
+The code has not been compiled with JUCE here; the standalone DSP regression tests pass. The GitHub Actions Windows compilation is the next validation step.

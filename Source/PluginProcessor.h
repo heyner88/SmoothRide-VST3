@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "GainRider.h"
+#include <atomic>
 
 class SmoothRideAudioProcessor final : public juce::AudioProcessor {
 public:
@@ -24,8 +25,17 @@ public:
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
     juce::AudioProcessorValueTreeState apvts;
+    // Single audio-thread writer, GUI-thread readers. Telemetry does not affect DSP.
+    float getInputPeak() const noexcept { return inputPeak.load(std::memory_order_relaxed); }
+    float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
+    float getRideDb() const noexcept { return rideDb.load(std::memory_order_relaxed); }
+    float getLimiterReductionDb() const noexcept { return limiterReductionDb.load(std::memory_order_relaxed); }
+    // Receives no allocations, locks or GUI callbacks on the audio thread.
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     smoothride::GainRider rider;
+    std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f};
+    std::atomic<float> rideDb {0.0f}, limiterReductionDb {0.0f};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessor)
 };
