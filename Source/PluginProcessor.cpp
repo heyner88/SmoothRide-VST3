@@ -5,7 +5,14 @@
 SmoothRideAudioProcessor::SmoothRideAudioProcessor()
 : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                 .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-  apvts(*this, nullptr, "SmoothRideState", createLayout()) {}
+  apvts(*this, nullptr, "SmoothRideState", createLayout()) {
+    // Bind fixed atomic parameter pointers on construction, never in processBlock.
+    const bool bound = parameterCache.bind([this](const char* id) noexcept {
+        return apvts.getRawParameterValue(id);
+    });
+    jassert(bound);
+    if (!bound) std::terminate(); // Programming error: APVTS layout and cache disagree.
+}
 
 juce::AudioProcessorValueTreeState::ParameterLayout SmoothRideAudioProcessor::createLayout() {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
@@ -82,15 +89,20 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     const int channels = juce::jmin(getTotalNumInputChannels(), buffer.getNumChannels());
     if (channels < 1) { buffer.clear(); return; }
     for (int c = channels; c < buffer.getNumChannels(); ++c) buffer.clear(c, 0, buffer.getNumSamples());
-    auto p = [&](const char* id) { return apvts.getRawParameterValue(id)->load(); };
+    // The cache stores APVTS atomic pointers, not values: automation and presets
+    // remain visible on every callback without repeated ID lookups.
+    const auto& p = parameterCache;
+    using P = smoothride::ParameterCache;
     smoothride::Settings settings;
-    settings.targetDb = p("target"); settings.floorDb = p("floor"); settings.maxBoostDb = p("range"); settings.maxCutDb = p("maxCut");
-    settings.upMs = p("speed"); settings.downMs = p("downSpeed"); settings.mix = p("mix") / 100.0f; settings.outputDb = p("output");
-    settings.ceilingDb = p("ceiling");
-    settings.gateHysteresisDb = p("gateHyst");
-    settings.lowLevelProtect = p("lowProtect");
-    settings.adaptiveFloor = p("adaptiveFloor");
-    settings.noiseGuard = p("noiseGuard");
+    settings.targetDb = p.get(P::target); settings.floorDb = p.get(P::floor);
+    settings.maxBoostDb = p.get(P::range); settings.maxCutDb = p.get(P::maxCut);
+    settings.upMs = p.get(P::speed); settings.downMs = p.get(P::downSpeed);
+    settings.mix = p.get(P::mix) / 100.0f; settings.outputDb = p.get(P::output);
+    settings.ceilingDb = p.get(P::ceiling);
+    settings.gateHysteresisDb = p.get(P::gateHyst);
+    settings.lowLevelProtect = p.get(P::lowProtect);
+    settings.adaptiveFloor = p.get(P::adaptiveFloor);
+    settings.noiseGuard = p.get(P::noiseGuard);
     const bool guardNow = settings.noiseGuard >= 0.5f;
     const bool guardToggled = guardStateInitialized && guardNow != lastGuardState;
     lastGuardState = guardNow;

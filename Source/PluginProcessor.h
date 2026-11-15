@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "GainRider.h"
 #include "PerformanceTelemetry.h"
+#include "ParameterCache.h"
 #include <atomic>
 
 class SmoothRideAudioProcessor final : public juce::AudioProcessor {
@@ -77,6 +78,7 @@ public:
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+    smoothride::ParameterCache parameterCache;
     smoothride::GainRider rider, previousRider;
     smoothride::Settings lastAudioSettings;
     juce::AudioBuffer<float> transitionBuffer;
