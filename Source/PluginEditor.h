@@ -34,6 +34,10 @@ private:
     juce::TextButton captureA {"Store A"}, captureB {"Store B"};
     juce::TextButton recallA {"Recall A"}, recallB {"Recall B"};
     juce::Label notice;
+    juce::ToggleButton matchAB {"MATCH A/B"};
+    juce::TextButton calibrateA {"Cal A"}, calibrateB {"Cal B"};
+    juce::Label comparisonInfo;
+
 
     std::array<float, 240> gainHistory {};
     std::array<float, 240> rmsHistory {};

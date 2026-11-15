@@ -29,6 +29,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout SmoothRideAudioProcessor::cr
 void SmoothRideAudioProcessor::prepareToPlay(double sr, int) {
     currentSampleRate = sr > 0.0 ? sr : 48000.0;
     rider.prepare(currentSampleRate);
+    previousRider.prepare(currentSampleRate);
+    transitionDuration = juce::jmax(1, (int) std::round(currentSampleRate * 0.08));
+    transitionSamplesLeft = 0;
+    // Scratch allocated outside the real-time callback.
+    preparedBufferSize = 16384;
+    transitionBuffer.setSize(2, preparedBufferSize, false, false, true);
+    transitionBuffer.clear();
+    recentPower = 1.e-12;
+    recentOutputRmsDb.store(-100.f, std::memory_order_relaxed);
+    currentCompareGainLinear = previousCompareGainLinear = 1.f;
+    lastSnapshotVersion = snapshotVersion.load(std::memory_order_relaxed);
     performance.reset();
     averageBlockLoad.store(0.0f, std::memory_order_relaxed);
     maximumBlockLoad.store(0.0f, std::memory_order_relaxed);
@@ -65,9 +76,60 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     }
     const int count = channels * buffer.getNumSamples();
     const float blockRms = count > 0 ? (float) std::sqrt(inputPower / count) : 0.0f;
+    // A/B recall signals an 80 ms dual-engine transition, preserving the previous
+    // riding state and its exact settings. No allocations occur inside processBlock.
+    const auto revision = snapshotVersion.load(std::memory_order_acquire);
+    if (revision != lastSnapshotVersion) {
+        lastSnapshotVersion = revision;
+        previousRider = rider;
+        previousRider.setSettings(lastAudioSettings);
+        previousCompareGainLinear = currentCompareGainLinear;
+        transitionSamplesLeft = transitionDuration;
+    }
+    const float requestedCompensationDb = abMatchEnabled.load(std::memory_order_relaxed)
+                                   ? comparisonGainTargetDb.load(std::memory_order_relaxed) : 0.f;
+    lastAudioSettings = settings;
+    const bool canCrossfade = transitionSamplesLeft > 0 && buffer.getNumSamples() <= preparedBufferSize;
+    if (canCrossfade) {
+        for (int c=0; c<channels; ++c)
+            transitionBuffer.copyFrom(c, 0, buffer, c, 0, buffer.getNumSamples());
+        previousRider.process(transitionBuffer.getWritePointer(0),
+             channels == 2 ? transitionBuffer.getWritePointer(1) : nullptr,
+             buffer.getNumSamples(), channels == 2);
+    }
     rider.setSettings(settings);
     rider.process(buffer.getWritePointer(0), channels == 2 ? buffer.getWritePointer(1) : nullptr,
                   buffer.getNumSamples(), channels == 2);
+    // Apply optional comparison-only gain, independently of the saved DSP parameters.
+    // Crossfade from both full processing engines rather than abruptly switching gain.
+    // Gain matching is bounded to +/-6 dB per slot and fades into place over 80 ms.
+    double finalPower = 0.0;
+    const float targetComp = juce::jlimit(-6.f, 0.f, requestedCompensationDb);
+    const float targetLinear = std::pow(10.f, targetComp / 20.f);
+    const float compensationAlpha = 1.f - std::exp(-1.f/(float)(currentSampleRate*0.08));
+    const float oldComp = previousCompareGainLinear;
+    for (int i=0; i<buffer.getNumSamples(); ++i) {
+        // Smooth gain in linear amplitude, with no transcendental math per sample.
+        currentCompareGainLinear += (targetLinear-currentCompareGainLinear)*compensationAlpha;
+        const float newComp = currentCompareGainLinear;
+        const float fraction = canCrossfade ? juce::jlimit(0.f, 1.f,
+              1.f - (float)transitionSamplesLeft / (float)transitionDuration) : 1.f;
+        for (int c=0; c<channels; ++c) {
+            const float newValue = buffer.getSample(c,i) * newComp;
+            const float oldValue = canCrossfade ? transitionBuffer.getSample(c,i) * oldComp : 0.f;
+            const float output = canCrossfade ? oldValue*(1.f-fraction) + newValue*fraction : newValue;
+            buffer.setSample(c,i, output);
+            finalPower += (double)output*(double)output;
+        }
+        if (transitionSamplesLeft > 0) --transitionSamplesLeft;
+    }
+    if (transitionSamplesLeft == 0) previousCompareGainLinear = currentCompareGainLinear;
+    const double meanPower = count>0 ? finalPower / (double)count : 0.0;
+    const double smoothing = std::exp(-(double)buffer.getNumSamples()
+                       / (currentSampleRate*2.0));
+    recentPower = smoothing * recentPower + (1.0-smoothing)*meanPower;
+    recentOutputRmsDb.store((float)(10.0*std::log10(std::max(1.e-16,recentPower))),
+                             std::memory_order_relaxed);
     float outPeak = 0.0f;
     for (int c = 0; c < channels; ++c)
         outPeak = juce::jmax(outPeak, buffer.getMagnitude(c, 0, buffer.getNumSamples()));
@@ -203,6 +265,7 @@ void SmoothRideAudioProcessor::captureAB(bool slotB) {
         bank.addChild(node, -1, nullptr);
     }
     saveSnapshot(node, captureParameters());
+    node.removeProperty("calDb", nullptr);
 }
 
 bool SmoothRideAudioProcessor::hasAB(bool slotB) const {
@@ -214,8 +277,40 @@ bool SmoothRideAudioProcessor::recallAB(bool slotB) {
     auto node = findNamed(apvts.state.getChildWithName(userBankID), abID,
                           slotB ? "B" : "A");
     if (!node.isValid()) return false;
+    const auto bank = apvts.state.getChildWithName(userBankID);
+    auto a = findNamed(bank, abID, "A");
+    auto b = findNamed(bank, abID, "B");
+    float matchDb = 0.f;
+    if (abMatchEnabled.load(std::memory_order_relaxed)
+        && a.isValid() && b.isValid() && a.hasProperty("calDb") && b.hasProperty("calDb")) {
+        const float reference = juce::jmin((float)a.getProperty("calDb"), (float)b.getProperty("calDb"));
+        const float slotLevel = (float)node.getProperty("calDb");
+        // Attenuation-only prevents comparison matching from defeating the peak ceiling.
+        matchDb = juce::jlimit(-6.f, 0.f, reference-slotLevel);
+    }
+    comparisonGainTargetDb.store(matchDb, std::memory_order_relaxed);
     applyParameters(readSnapshot(node, captureParameters()));
+    snapshotVersion.fetch_add(1, std::memory_order_release);
     return true;
+}
+
+bool SmoothRideAudioProcessor::calibrateAB(bool slotB) {
+    auto bank = apvts.state.getChildWithName(userBankID);
+    auto node = findNamed(bank, abID, slotB ? "B" : "A");
+    if (!node.isValid()) return false;
+    node.setProperty("calDb", getRecentOutputRmsDb(), nullptr);
+    return true;
+}
+
+float SmoothRideAudioProcessor::getABCalibration(bool slotB) const {
+    auto node = findNamed(apvts.state.getChildWithName(userBankID), abID, slotB ? "B" : "A");
+    return node.isValid() && node.hasProperty("calDb") ? (float)node.getProperty("calDb") : -160.f;
+}
+
+void SmoothRideAudioProcessor::setABMatching(bool enabled) {
+    abMatchEnabled.store(enabled, std::memory_order_relaxed);
+    apvts.state.setProperty("abMatchEnabled", enabled, nullptr);
+    if (!enabled) comparisonGainTargetDb.store(0.f, std::memory_order_relaxed);
 }
 
 void SmoothRideAudioProcessor::getStateInformation(juce::MemoryBlock& b) {
@@ -223,6 +318,10 @@ void SmoothRideAudioProcessor::getStateInformation(juce::MemoryBlock& b) {
 }
 void SmoothRideAudioProcessor::setStateInformation(const void* data, int size) {
     if (auto xml = getXmlFromBinary(data, size))
-        if (xml->hasTagName(apvts.state.getType())) apvts.replaceState(juce::ValueTree::fromXml(*xml));
+        if (xml->hasTagName(apvts.state.getType())) {
+            apvts.replaceState(juce::ValueTree::fromXml(*xml));
+            abMatchEnabled.store((bool)apvts.state.getProperty("abMatchEnabled", false),
+                                 std::memory_order_relaxed);
+        }
 }
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new SmoothRideAudioProcessor(); }

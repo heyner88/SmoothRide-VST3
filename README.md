@@ -39,3 +39,6 @@ See README-v0.3.2.md for changes and compatibility.
 
 
 See README-v0.3.3.md for compact editor changes.
+
+
+See **README-v0.4.2.md** for comparison features, calibration, and testing.

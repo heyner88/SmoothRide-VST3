@@ -38,6 +38,14 @@ public:
     void captureAB(bool slotB);
     bool recallAB(bool slotB);
     bool hasAB(bool slotB) const;
+    bool calibrateAB(bool slotB);
+    float getABCalibration(bool slotB) const;
+    void setABMatching(bool enabled);
+    bool isABMatching() const noexcept { return abMatchEnabled.load(std::memory_order_relaxed); }
+    // Output-level estimate for manual A/B reference calibration, not integrated LUFS.
+    float getRecentOutputRmsDb() const noexcept { return recentOutputRmsDb.load(std::memory_order_relaxed); }
+    float getABMatchingDb() const noexcept { return comparisonGainTargetDb.load(std::memory_order_relaxed); }
+
 
     // Single audio-thread writer, GUI-thread readers. Telemetry does not affect DSP.
     float getInputBlockRms() const noexcept { return inputBlockRms.load(std::memory_order_relaxed); }
@@ -55,7 +63,18 @@ public:
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
-    smoothride::GainRider rider;
+    smoothride::GainRider rider, previousRider;
+    smoothride::Settings lastAudioSettings;
+    juce::AudioBuffer<float> transitionBuffer;
+    int transitionSamplesLeft = 0, transitionDuration = 1;
+    int preparedBufferSize = 0;
+    std::atomic<unsigned int> snapshotVersion {0};
+    unsigned int lastSnapshotVersion = 0;
+    std::atomic<bool> abMatchEnabled {false};
+    std::atomic<float> comparisonGainTargetDb {0.f}, recentOutputRmsDb {-100.f};
+    float previousCompareGainLinear = 1.f, currentCompareGainLinear = 1.f;
+    double recentPower = 1.e-12;
+
     smoothride::PerformanceTelemetry performance;
     double currentSampleRate = 48000.0;
     std::atomic<float> averageBlockLoad {0.0f}, maximumBlockLoad {0.0f}, callbackMicroseconds {0.0f};
