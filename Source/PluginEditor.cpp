@@ -18,7 +18,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         sliders[i] = std::make_unique<juce::Slider>();
         auto& slider = *sliders[i];
         slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 20);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 17);
         slider.setColour(juce::Slider::rotarySliderFillColourId, accent);
         slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff354555));
         slider.setColour(juce::Slider::thumbColourId, text);
@@ -53,6 +53,60 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         if (selected >= 2) applyPreset(selected);
     };
     addAndMakeVisible(presets);
+
+    presetName.setTextToShowWhenEmpty("Preset name (max 40 characters)", faint);
+    presetName.setColour(juce::TextEditor::backgroundColourId, panel);
+    presetName.setColour(juce::TextEditor::textColourId, text);
+    presetName.setColour(juce::TextEditor::outlineColourId, faint.withAlpha(0.35f));
+    presetName.setInputRestrictions(40);
+    addAndMakeVisible(presetName);
+    addAndMakeVisible(userPresetList);
+    userPresetList.setTextWhenNothingSelected("Saved presets");
+    userPresetList.onChange = [this] {
+        const auto name = userPresetList.getText();
+        if (name.isNotEmpty()) presetName.setText(name, false);
+    };
+    refreshUserPresetList();
+
+    for (auto* button : {&savePreset, &loadPreset, &deletePreset,
+                         &captureA, &captureB, &recallA, &recallB}) {
+        button->setColour(juce::TextButton::buttonColourId, panel);
+        button->setColour(juce::TextButton::textColourOffId, text);
+        addAndMakeVisible(*button);
+    }
+    savePreset.onClick = [this] {
+        const auto name = presetName.getText().trim();
+        if (processor.saveUserPreset(name)) {
+            refreshUserPresetList();
+            const auto names = processor.listUserPresets();
+            const int idx = names.indexOf(name);
+            if (idx >= 0) userPresetList.setSelectedId(idx + 1, juce::dontSendNotification);
+            setNotice("Saved: " + name);
+        } else setNotice("Enter a name up to 40 characters");
+    };
+    loadPreset.onClick = [this] {
+        const auto name = userPresetList.getText();
+        setNotice(processor.loadUserPreset(name) ? "Loaded: " + name : "Select a saved preset");
+    };
+    deletePreset.onClick = [this] {
+        const auto name = userPresetList.getText();
+        if (processor.deleteUserPreset(name)) {
+            refreshUserPresetList();
+            setNotice("Deleted: " + name);
+        } else setNotice("Select a saved preset");
+    };
+    captureA.onClick = [this] { processor.captureAB(false); setNotice("Stored snapshot A"); };
+    captureB.onClick = [this] { processor.captureAB(true); setNotice("Stored snapshot B"); };
+    recallA.onClick = [this] {
+        setNotice(processor.recallAB(false) ? "Recalled A" : "Store A first");
+    };
+    recallB.onClick = [this] {
+        setNotice(processor.recallAB(true) ? "Recalled B" : "Store B first");
+    };
+    notice.setColour(juce::Label::textColourId, faint);
+    notice.setJustificationType(juce::Justification::centredRight);
+    notice.setFont(juce::Font(juce::FontOptions(11.0f)));
+    addAndMakeVisible(notice);
     gainHistory.fill(0.0f);
     rmsHistory.fill(-100.0f);
     // Fixed compact editor: never resize host-owned VST3 windows interactively.
@@ -79,6 +133,19 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     rmsHistory[(size_t)historyPosition] = displayedRmsDb;
     historyPosition = (historyPosition + 1) % (int)gainHistory.size();
     repaint(juce::Rectangle<int>(18, 8, getWidth()-36, 266));
+}
+
+void SmoothRideAudioProcessorEditor::refreshUserPresetList() {
+    auto previous = userPresetList.getText();
+    userPresetList.clear(juce::dontSendNotification);
+    const auto names = processor.listUserPresets();
+    for (int i = 0; i < names.size(); ++i) userPresetList.addItem(names[i], i+1);
+    const auto index = names.indexOf(previous);
+    if (index >= 0) userPresetList.setSelectedId(index+1, juce::dontSendNotification);
+}
+
+void SmoothRideAudioProcessorEditor::setNotice(const juce::String& message) {
+    notice.setText(message, juce::dontSendNotification);
 }
 
 void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
@@ -127,7 +194,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.4.0  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
+    g.drawText("v0.4.1  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.drawText("DSP AVG " + juce::String(displayedAverageLoad, 2) + "%"
@@ -207,8 +274,8 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
         : displayedRequestedDb <= -cut+0.05f && cut>0.f ? "MAX CUT" : "ACTIVE";
     drawDiagnostic(2, "RIDER STATUS", status, displayedActive ? accent : faint);
 
-    // Four columns instead of three, keeping the whole editor short.
-    constexpr int cols = 4, cardY = 274, cardGap = 8, cardH = 87;
+    // Compact cards leave two rows for user presets and A/B snapshots.
+    constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 70;
     const int cardW = (innerWidth - (cols-1)*cardGap) / cols;
     for (int i=0; i<numControls; ++i) {
         const int x = margin + (i%cols)*(cardW+cardGap);
@@ -219,14 +286,24 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
 }
 
 void SmoothRideAudioProcessorEditor::resized() {
-    constexpr int cols = 4, cardY = 274, cardGap = 8, cardH = 87;
+    constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 70;
     const int cardW = (getWidth()-36-(cols-1)*cardGap)/cols;
     for (int i=0; i<numControls; ++i) {
         const int x = 18+(i%cols)*(cardW+cardGap);
         const int y = cardY+(i/cols)*(cardH+cardGap);
-        labels[(size_t)i]->setBounds(x+6, y+3, cardW-12, 17);
-        sliders[(size_t)i]->setBounds(x+8, y+19, cardW-16, cardH-22);
+        labels[(size_t)i]->setBounds(x+6, y+1, cardW-12, 14);
+        sliders[(size_t)i]->setBounds(x+8, y+14, cardW-16, cardH-15);
     }
-    presetLabel.setBounds(24, 566, 200, 24);
-    presets.setBounds(224, 565, getWidth()-245, 28);
+    presetLabel.setBounds(22, 497, 155, 24);
+    presets.setBounds(178, 496, 300, 27);
+    presetName.setBounds(489, 496, 244, 27);
+    savePreset.setBounds(739, 496, 71, 27);
+    notice.setBounds(815, 497, 244, 23);
+    userPresetList.setBounds(20, 541, 270, 29);
+    loadPreset.setBounds(298, 541, 77, 29);
+    deletePreset.setBounds(380, 541, 77, 29);
+    captureA.setBounds(485, 541, 85, 29);
+    captureB.setBounds(575, 541, 85, 29);
+    recallA.setBounds(672, 541, 85, 29);
+    recallB.setBounds(762, 541, 85, 29);
 }

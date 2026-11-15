@@ -88,6 +88,136 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
 juce::AudioProcessorEditor* SmoothRideAudioProcessor::createEditor() {
     return new SmoothRideAudioProcessorEditor(*this);
 }
+namespace {
+const std::array<const char*, 11> snapshotIDs {{
+    "target", "floor", "range", "maxCut", "speed", "downSpeed", "mix",
+    "output", "ceiling", "gateHyst", "lowProtect"
+}};
+const juce::Identifier userBankID("UserPresets"), presetID("UserPreset"), abID("ABSlot");
+
+juce::ValueTree ensureUserBank(juce::ValueTree root) {
+    auto bank = root.getChildWithName(userBankID);
+    if (!bank.isValid()) {
+        bank = juce::ValueTree(userBankID);
+        root.addChild(bank, -1, nullptr);
+    }
+    return bank;
+}
+
+juce::ValueTree findNamed(juce::ValueTree bank, juce::Identifier type,
+                          const juce::String& name) {
+    for (int i = 0; i < bank.getNumChildren(); ++i) {
+        auto node = bank.getChild(i);
+        if (node.hasType(type) && node.getProperty("name").toString() == name)
+            return node;
+    }
+    return {};
+}
+
+void saveSnapshot(juce::ValueTree node, const SmoothRideAudioProcessor::Snapshot& values) {
+    for (size_t i = 0; i < snapshotIDs.size(); ++i)
+        node.setProperty(juce::Identifier(snapshotIDs[i]), values[i], nullptr);
+}
+
+SmoothRideAudioProcessor::Snapshot readSnapshot(juce::ValueTree node,
+                                                const SmoothRideAudioProcessor::Snapshot& fallback) {
+    auto result = fallback;
+    for (size_t i = 0; i < snapshotIDs.size(); ++i) {
+        const juce::Identifier key(snapshotIDs[i]);
+        if (node.hasProperty(key)) result[i] = (float) node.getProperty(key);
+    }
+    return result;
+}
+}
+
+SmoothRideAudioProcessor::Snapshot SmoothRideAudioProcessor::captureParameters() const {
+    Snapshot values {};
+    for (size_t i = 0; i < snapshotIDs.size(); ++i) {
+        if (auto* raw = apvts.getRawParameterValue(snapshotIDs[i]))
+            values[i] = raw->load(std::memory_order_relaxed);
+    }
+    return values;
+}
+
+void SmoothRideAudioProcessor::applyParameters(const Snapshot& values) {
+    // Run from the GUI message thread; parameter IDs remain compatible with v0.4.0.
+    for (size_t i = 0; i < snapshotIDs.size(); ++i) {
+        if (auto* param = apvts.getParameter(snapshotIDs[i])) {
+            const auto normalized = param->convertTo0to1(values[i]);
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(normalized);
+            param->endChangeGesture();
+        }
+    }
+}
+
+juce::StringArray SmoothRideAudioProcessor::listUserPresets() const {
+    juce::StringArray names;
+    auto bank = apvts.state.getChildWithName(userBankID);
+    if (bank.isValid()) {
+        for (int i = 0; i < bank.getNumChildren(); ++i) {
+            auto child = bank.getChild(i);
+            if (child.hasType(presetID)) names.add(child.getProperty("name").toString());
+        }
+    }
+    names.sort(true);
+    return names;
+}
+
+bool SmoothRideAudioProcessor::saveUserPreset(const juce::String& inputName) {
+    const auto name = inputName.trim();
+    if (name.isEmpty() || name.length() > 40) return false;
+    auto bank = ensureUserBank(apvts.state);
+    auto preset = findNamed(bank, presetID, name);
+    if (!preset.isValid()) {
+        preset = juce::ValueTree(presetID);
+        preset.setProperty("name", name, nullptr);
+        bank.addChild(preset, -1, nullptr);
+    }
+    saveSnapshot(preset, captureParameters());
+    return true;
+}
+
+bool SmoothRideAudioProcessor::loadUserPreset(const juce::String& name) {
+    auto preset = findNamed(apvts.state.getChildWithName(userBankID), presetID, name);
+    if (!preset.isValid()) return false;
+    applyParameters(readSnapshot(preset, captureParameters()));
+    return true;
+}
+
+bool SmoothRideAudioProcessor::deleteUserPreset(const juce::String& name) {
+    auto bank = apvts.state.getChildWithName(userBankID);
+    auto preset = findNamed(bank, presetID, name);
+    if (!preset.isValid()) return false;
+    bank.removeChild(preset, nullptr);
+    return true;
+}
+
+void SmoothRideAudioProcessor::captureAB(bool slotB) {
+    auto bank = ensureUserBank(apvts.state);
+    const juce::String name = slotB ? "B" : "A";
+    auto node = findNamed(bank, abID, name);
+    if (!node.isValid()) {
+        node = juce::ValueTree(abID);
+        node.setProperty("name", name, nullptr);
+        bank.addChild(node, -1, nullptr);
+    }
+    saveSnapshot(node, captureParameters());
+}
+
+bool SmoothRideAudioProcessor::hasAB(bool slotB) const {
+    return findNamed(apvts.state.getChildWithName(userBankID), abID,
+                     slotB ? "B" : "A").isValid();
+}
+
+bool SmoothRideAudioProcessor::recallAB(bool slotB) {
+    auto node = findNamed(apvts.state.getChildWithName(userBankID), abID,
+                          slotB ? "B" : "A");
+    if (!node.isValid()) return false;
+    applyParameters(readSnapshot(node, captureParameters()));
+    return true;
+}
+
 void SmoothRideAudioProcessor::getStateInformation(juce::MemoryBlock& b) {
     if (auto xml = apvts.copyState().createXml()) copyXmlToBinary(*xml, b);
 }

@@ -16,6 +16,9 @@ private:
     void drawMeter(juce::Graphics&, juce::Rectangle<float>, float levelDb,
                    const juce::String& caption) const;
     void applyPreset(int preset);
+    void refreshUserPresetList();
+    void setNotice(const juce::String& message);
+
     SmoothRideAudioProcessor& processor;
     static constexpr int numControls = 11;
     std::array<juce::String, numControls> ids {{ "target", "floor", "range", "maxCut", "speed",
@@ -25,6 +28,13 @@ private:
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, numControls> attachments;
     juce::ComboBox presets;
     juce::Label presetLabel;
+    juce::ComboBox userPresetList;
+    juce::TextEditor presetName;
+    juce::TextButton savePreset {"Save"}, loadPreset {"Load"}, deletePreset {"Delete"};
+    juce::TextButton captureA {"Store A"}, captureB {"Store B"};
+    juce::TextButton recallA {"Recall A"}, recallB {"Recall B"};
+    juce::Label notice;
+
     std::array<float, 240> gainHistory {};
     std::array<float, 240> rmsHistory {};
     int historyPosition = 0;

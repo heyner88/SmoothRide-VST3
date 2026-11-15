@@ -26,6 +26,19 @@ public:
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
     juce::AudioProcessorValueTreeState apvts;
+    // User snapshots are stored within the host state, not on the audio thread.
+    static constexpr int presetParameterCount = 11;
+    using Snapshot = std::array<float, presetParameterCount>;
+    Snapshot captureParameters() const;
+    void applyParameters(const Snapshot& values);
+    juce::StringArray listUserPresets() const;
+    bool saveUserPreset(const juce::String& name);
+    bool loadUserPreset(const juce::String& name);
+    bool deleteUserPreset(const juce::String& name);
+    void captureAB(bool slotB);
+    bool recallAB(bool slotB);
+    bool hasAB(bool slotB) const;
+
     // Single audio-thread writer, GUI-thread readers. Telemetry does not affect DSP.
     float getInputBlockRms() const noexcept { return inputBlockRms.load(std::memory_order_relaxed); }
     float getInputPeak() const noexcept { return inputPeak.load(std::memory_order_relaxed); }
