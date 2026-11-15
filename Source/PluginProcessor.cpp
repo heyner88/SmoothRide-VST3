@@ -91,6 +91,7 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     const bool guardToggled = guardStateInitialized && guardNow != lastGuardState;
     lastGuardState = guardNow;
     guardStateInitialized = true;
+    const auto parametersEnd = std::chrono::steady_clock::now();
     float inPeak = 0.0f;
     double inputPower = 0.0;
     for (int c = 0; c < channels; ++c) {
@@ -103,6 +104,7 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     }
     const int count = channels * buffer.getNumSamples();
     const float blockRms = count > 0 ? (float) std::sqrt(inputPower / count) : 0.0f;
+    const auto inputEnd = std::chrono::steady_clock::now();
     // A/B recall signals an 80 ms dual-engine transition, preserving the previous
     // riding state and its exact settings. No allocations occur inside processBlock.
     const auto revision = snapshotVersion.load(std::memory_order_acquire);
@@ -185,7 +187,11 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
                        std::chrono::duration<double>(riderEnd - riderStart).count(),
                        std::chrono::duration<double>(riderStart - callbackStart).count(),
                        std::chrono::duration<double>(callbackEnd - riderEnd).count(),
-                       lastTelemetrySeconds);
+                       lastTelemetrySeconds,
+                       std::chrono::duration<double>(parametersEnd - callbackStart).count(),
+                       std::chrono::duration<double>(inputEnd - parametersEnd).count(),
+                       std::chrono::duration<double>(riderStart - inputEnd).count(),
+                       canCrossfade);
     averageBlockLoad.store(performance.averagePercent(), std::memory_order_relaxed);
     maximumBlockLoad.store(performance.maximumPercent(), std::memory_order_relaxed);
     rollingPeakLoad.store(performance.rollingPeakPercent(), std::memory_order_relaxed);

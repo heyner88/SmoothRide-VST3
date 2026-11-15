@@ -60,6 +60,8 @@ private:
     float displayedLastTogglePercent = 0, displayedLastToggleRiderPercent = 0;
     float displayedLastTogglePrePercent = 0, displayedLastTogglePostPercent = 0, displayedMonitorUs = 0;
     float displayedLastSpikePercent = 0, displayedLastSpikeUs = 0, displayedLastSpikeBudgetUs = 0;
+    float displayedToggleParams = 0, displayedToggleInput = 0, displayedToggleAB = 0, displayedNormalPre = 0;
+    bool displayedABRunning = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessorEditor)
 };

@@ -224,6 +224,11 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedLastTogglePrePercent = dsp.lastTogglePrePercent;
     displayedLastTogglePostPercent = dsp.lastTogglePostPercent;
     displayedMonitorUs = dsp.monitorUs;
+    displayedToggleParams = dsp.lastToggleParamsPercent;
+    displayedToggleInput = dsp.lastToggleInputPercent;
+    displayedToggleAB = dsp.lastToggleABPercent;
+    displayedNormalPre = dsp.normalPreAveragePercent;
+    displayedABRunning = dsp.lastToggleABRunning;
     comparisonInfo.setText("Output RMS " + juce::String(processor.getRecentOutputRmsDb(), 1)
        + " dBFS   |   Match " + juce::String(processor.getABMatchingDb(), 1) + " dB"
        + "   |   Floor " + juce::String(processor.getEffectiveFloorDb(), 1) + " dB",
@@ -293,7 +298,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.6.5  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
+    g.drawText("v0.6.6  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -311,12 +316,13 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
                + juce::String(displayedLastSpikeBudgetUs, 1) + " us)",
                272, 32, 386, 14, juce::Justification::centredLeft);
     g.drawText("T " + juce::String(static_cast<juce::int64>(displayedGuardToggles))
-               + "  BLOCK " + juce::String(displayedLastTogglePercent, 1) + "%"
-               + "  PRE " + juce::String(displayedLastTogglePrePercent, 1) + "%"
+               + "  P " + juce::String(displayedToggleParams, 1) + "%"
+               + "  I " + juce::String(displayedToggleInput, 1) + "%"
+               + "  AB " + juce::String(displayedToggleAB, 1) + "%"
+               + (displayedABRunning ? "*" : "")
                + "  R " + juce::String(displayedLastToggleRiderPercent, 1) + "%"
-               + "  POST " + juce::String(displayedLastTogglePostPercent, 1) + "%"
-               + "  MON " + juce::String(displayedMonitorUs, 0) + "us",
-               657, 32, 404, 14, juce::Justification::centredRight);
+               + "  O " + juce::String(displayedLastTogglePostPercent, 1) + "%",
+               652, 32, 408, 14, juce::Justification::centredRight);
 
     // Wide, single-row peak meters: all coordinates stay inside 1080 x 600.
     g.setColour(panel);
@@ -335,7 +341,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(chart, 8.f);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("RIDE (+/-12 dB)  /  RMS (-100..0 dBFS)  |  NOISE REF "
+    g.drawText("RIDE / RMS   |   NORMAL PRE " + juce::String(displayedNormalPre, 2) + "%   |   NOISE REF "
                + (processor.apvts.getRawParameterValue("noiseGuard")->load() >= 0.5f
                    ? juce::String(processor.getNoiseReferenceDb(), 0) + " dB" : "OFF"),
                31, 123, 625, 17,

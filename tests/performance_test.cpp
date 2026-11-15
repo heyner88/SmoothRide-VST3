@@ -83,5 +83,34 @@ int main() {
     t.reset(); published.publish(t);
     assert(published.read().lastTogglePostPercent == 0.f);
     assert(published.read().monitorUs == 0.f);
+    // v0.6.6: phase timing isolates parameters, input scan and A/B preparation.
+    t.reset();
+    t.record(0.0005, 480, 48000, 5000, 10.0, false, 0.0001,
+             0.0003, 0.0001, 0.0, 0.00005, 0.0002, 0.00005, false);
+    assert(std::abs(t.normalPreAveragePercent() - 3.f) < 0.001f);
+    // Toggle callback: total 30%, PRE 20%, rider 7%, post 3%.
+    t.record(0.003, 480, 48000, 5001, 10.0, true, 0.0007,
+             0.002, 0.0003, 0.0, 0.0002, 0.0004, 0.0014, true);
+    published.publish(t);
+    auto detailed = published.read();
+    assert(std::abs(detailed.lastToggleParamsPercent - 2.f) < 0.001f);
+    assert(std::abs(detailed.lastToggleInputPercent - 4.f) < 0.001f);
+    assert(std::abs(detailed.lastToggleABPercent - 14.f) < 0.001f);
+    assert(detailed.lastToggleABRunning);
+    assert(std::abs(detailed.lastToggleParamsPercent + detailed.lastToggleInputPercent
+         + detailed.lastToggleABPercent - detailed.lastTogglePrePercent) < 0.001f);
+    assert(std::abs(detailed.normalPreAveragePercent - 3.f) < 0.001f);
+    // Non-toggle callback should update normal PRE but retain last-toggle metrics.
+    t.record(0.0007, 480, 48000, 5002, 10.0, false, 0.0001,
+             0.0004, 0.0002, 0.0, 0.00005, 0.00020, 0.00015, false);
+    published.publish(t);
+    detailed = published.read();
+    assert(detailed.guardToggles == 1);
+    assert(detailed.normalPreAveragePercent > 3.f);
+    t.reset(); published.publish(t);
+    detailed = published.read();
+    assert(detailed.lastToggleABPercent == 0.f);
+    assert(!detailed.lastToggleABRunning);
+    assert(detailed.normalPreAveragePercent == 0.f);
     std::cout << "Performance telemetry tests passed\n";
 }
