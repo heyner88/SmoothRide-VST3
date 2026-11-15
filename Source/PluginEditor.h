@@ -20,9 +20,9 @@ private:
     void setNotice(const juce::String& message);
 
     SmoothRideAudioProcessor& processor;
-    static constexpr int numControls = 11;
+    static constexpr int numControls = 12;
     std::array<juce::String, numControls> ids {{ "target", "floor", "range", "maxCut", "speed",
-                                                   "downSpeed", "mix", "output", "ceiling", "gateHyst", "lowProtect" }};
+                                                   "downSpeed", "mix", "output", "ceiling", "gateHyst", "lowProtect", "adaptiveFloor" }};
     std::array<std::unique_ptr<juce::Slider>, numControls> sliders;
     std::array<std::unique_ptr<juce::Label>, numControls> labels;
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, numControls> attachments;

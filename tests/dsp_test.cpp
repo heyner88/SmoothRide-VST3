@@ -79,4 +79,37 @@ int main() {
     gated.process(middle.data(),nullptr,(int)middle.size(),false);
     assert(!gated.isRidingActive());
     std::cout<<"PASS hysteresis exit threshold\n";
+    // Adaptive floor mode must activate on quiet content without affecting
+    // the historical default when disabled.
+    Settings adaptiveSettings;
+    adaptiveSettings.floorDb=-60.0f;
+    adaptiveSettings.adaptiveFloor=1.0f;
+    adaptiveSettings.outputDb=0.0f;
+    adaptiveSettings.mix=1.0f;
+    adaptiveSettings.upMs=100.0f;
+    GainRider adaptiveRider;
+    adaptiveRider.prepare(48000);
+    adaptiveRider.setSettings(adaptiveSettings);
+    auto quietProgram=sine(48000*2, 0.0003f); // about -73.5 dBFS RMS
+    adaptiveRider.process(quietProgram.data(),nullptr,(int)quietProgram.size(),false);
+    assert(adaptiveRider.isRidingActive());
+    assert(adaptiveRider.currentEffectiveFloorDb() < -60.0f);
+    assert(adaptiveRider.currentRideDb() > 1.0f);
+    GainRider oldMode;
+    oldMode.prepare(48000);
+    adaptiveSettings.adaptiveFloor=0.0f;
+    oldMode.setSettings(adaptiveSettings);
+    auto quietManual=sine(48000*2, 0.0003f);
+    oldMode.process(quietManual.data(),nullptr,(int)quietManual.size(),false);
+    assert(!oldMode.isRidingActive());
+    assert(oldMode.currentEffectiveFloorDb() == -60.0f);
+    std::cout<<"PASS adaptive quiet program and manual compatibility\n";
+    adaptiveRider.reset();
+    adaptiveSettings.adaptiveFloor=1.0f;
+    adaptiveRider.setSettings(adaptiveSettings);
+    auto nearSilence=sine(48000*2, 0.00001f); // about -103 dBFS RMS
+    adaptiveRider.process(nearSilence.data(),nullptr,(int)nearSilence.size(),false);
+    assert(!adaptiveRider.isRidingActive());
+    assert(adaptiveRider.currentRequestedRideDb() == 0.f);
+    std::cout<<"PASS adaptive silence cutoff\n";
 }

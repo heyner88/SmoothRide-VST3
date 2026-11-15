@@ -1,3 +1,7 @@
+# SmoothRide v0.6.0
+
+See [README-v0.6.0.md](README-v0.6.0.md) for features, limitations, compatibility and test procedure.
+
 # SmoothRide v0.5.1
 
 Start with [README-v0.5.1.md](README-v0.5.1.md). This project is built in GitHub Actions on Windows.

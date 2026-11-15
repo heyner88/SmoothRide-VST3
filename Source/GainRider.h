@@ -16,11 +16,12 @@ struct Settings {
     float ceilingDb = -1.0f;     // instantaneous sample-peak ceiling, NOT true-peak
     float gateHysteresisDb = 0.0f; // 0 preserves v0.3.1 threshold behavior
     float lowLevelProtect = 0.0f; // 0 preserves v0.3.1; 1 applies 12 dB soft floor
+    float adaptiveFloor = 0.0f; // OFF by default; optional low-level program detection
 };
 class GainRider {
 public:
     void prepare(double sr) noexcept { sampleRate = std::max(8000.0, sr); reset(); }
-    void reset() noexcept { power = 0.0; rideDb = 0.0; peakGain = 1.0; detectedRmsDb = -160.0; requestedRideDb = 0.0; ridingActive = false; }
+    void reset() noexcept { power = 0.0; rideDb = 0.0; peakGain = 1.0; detectedRmsDb = -160.0; requestedRideDb = 0.0; ridingActive = false; effectiveFloorDb = settings.floorDb; }
     void setSettings(Settings s) noexcept { settings = s; }
     float currentRideDb() const noexcept { return (float)rideDb; }
     float currentPeakReductionDb() const noexcept {
@@ -29,6 +30,7 @@ public:
     // Diagnostics only: never fed back into signal processing.
     float currentDetectedRmsDb() const noexcept { return (float)detectedRmsDb; }
     float currentRequestedRideDb() const noexcept { return (float)requestedRideDb; }
+    float currentEffectiveFloorDb() const noexcept { return (float)effectiveFloorDb; }
     bool isRidingActive() const noexcept { return ridingActive; }
     void process(float* left, float* right, int numSamples, bool stereo) noexcept {
         if (!left || numSamples <= 0) return;
@@ -38,7 +40,8 @@ public:
         const double idle = coeff(6000.0);
         const double peakRelease = coeff(100.0);
         const double target = settings.targetDb;
-        const double floor = settings.floorDb;
+        const double manualFloor = settings.floorDb;
+        const bool adaptive = settings.adaptiveFloor >= 0.5f;
         const double hysteresis = std::clamp((double)settings.gateHysteresisDb, 0.0, 12.0);
         const bool protect = settings.lowLevelProtect >= 0.5f;
         const double maxBoost = std::max(0.0, (double)settings.maxBoostDb);
@@ -52,13 +55,22 @@ public:
             const double samplePower = stereo ? (l*l+r*r)*0.5 : l*l;
             power = detect*power + (1.0-detect)*samplePower;
             const double detectedDb = 10.0*std::log10(std::max(1.0e-16, power));
+            // Adaptive mode is level-based, not an actual speech/noise classifier.
+            // It can lower the floor for quiet program material, but retains a
+            // hard -88 dBFS silence cutoff. Pure steady noise above that may
+            // also activate it: avoid promising content-aware noise rejection.
+            const double floor = adaptive
+                ? std::min(manualFloor, std::clamp(detectedDb - 8.0, -85.0, -30.0))
+                : manualFloor;
+            effectiveFloorDb = floor;
+            const bool aboveSilenceCutoff = !adaptive || detectedDb > -88.0;
             // Threshold gate keeps silence/noise from being amplified.
             // With hysteresis disabled, this reproduces the original v0.3.1 comparison.
             // Enabled: activate above floor + hyst/2; remain active down to floor - hyst/2.
-            const bool active = hysteresis <= 0.0
+            const bool active = aboveSilenceCutoff && (hysteresis <= 0.0
                 ? detectedDb > floor
                 : (ridingActive ? detectedDb > floor - hysteresis*0.5
-                                : detectedDb > floor + hysteresis*0.5);
+                                : detectedDb > floor + hysteresis*0.5));
             double desired = active ? std::clamp(target - detectedDb, -maxCut, maxBoost) : 0.0;
             // Optional soft floor: ramp positive gain from zero to full over 12 dB.
             // Below floor there is still no automatic positive boost.
@@ -86,7 +98,7 @@ private:
     static double dbToLinear(double db) noexcept { return std::pow(10.0, db/20.0); }
     Settings settings;
     double sampleRate = 48000.0, power = 0.0, rideDb = 0.0, peakGain = 1.0;
-    double detectedRmsDb = -160.0, requestedRideDb = 0.0;
+    double detectedRmsDb = -160.0, requestedRideDb = 0.0, effectiveFloorDb = -60.0;
     bool ridingActive = false;
 };
 }

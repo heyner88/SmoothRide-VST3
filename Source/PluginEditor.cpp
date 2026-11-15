@@ -13,7 +13,7 @@ float ampDb(float a) noexcept {
 SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioProcessor& p)
     : juce::AudioProcessorEditor(&p), processor(p) {
     const std::array<juce::String, numControls> names {{ "TARGET RMS", "FLOOR", "MAX BOOST", "MAX CUT",
-         "GAIN UP", "GAIN DOWN", "MIX", "OUTPUT", "CEILING", "FLOOR HYST", "SOFT FLOOR" }};
+         "GAIN UP", "GAIN DOWN", "MIX", "OUTPUT", "CEILING", "FLOOR HYST", "SOFT FLOOR", "ADAPTIVE FLOOR" }};
     for (int i = 0; i < numControls; ++i) {
         sliders[i] = std::make_unique<juce::Slider>();
         auto& slider = *sliders[i];
@@ -26,7 +26,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         slider.setColour(juce::Slider::textBoxBackgroundColourId, panel);
         if (ids[i] == "speed" || ids[i] == "downSpeed") slider.setTextValueSuffix(" ms");
-        else if (ids[i] == "lowProtect") slider.setTextValueSuffix(" (0=OFF, 1=ON)");
+        else if (ids[i] == "lowProtect" || ids[i] == "adaptiveFloor") slider.setTextValueSuffix(" (0=OFF, 1=ON)");
         else if (ids[i] == "mix") slider.setTextValueSuffix(" %");
         else slider.setTextValueSuffix(" dB");
         addAndMakeVisible(slider);
@@ -189,7 +189,8 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedPeakLoad = processor.getMaximumBlockLoadPercent();
     displayedCallbackUs = processor.getLastCallbackMicroseconds();
     comparisonInfo.setText("Output RMS " + juce::String(processor.getRecentOutputRmsDb(), 1)
-       + " dBFS   |   Match " + juce::String(processor.getABMatchingDb(), 1) + " dB",
+       + " dBFS   |   Match " + juce::String(processor.getABMatchingDb(), 1) + " dB"
+       + "   |   Floor " + juce::String(processor.getEffectiveFloorDb(), 1) + " dB",
        juce::dontSendNotification);
     gainHistory[(size_t)historyPosition] = displayedRideDb;
     rmsHistory[(size_t)historyPosition] = displayedRmsDb;
@@ -213,10 +214,10 @@ void SmoothRideAudioProcessorEditor::setNotice(const juce::String& message) {
 void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
     // Optional parameter changes on the UI thread, never the audio thread.
     // The baseline exactly matches the v0.2 defaults; all presets retain safe limited riding.
-    const std::array<float, 11> baseline {{-12.f, -60.f, 6.f, 3.f, 3000.f, 650.f, 65.f, 6.f, -1.f, 0.f, 0.f}};
-    const std::array<float, 11> music    {{-12.f, -60.f, 4.f, 2.f, 4000.f, 900.f, 45.f, 6.f, -1.f, 0.f, 0.f}};
-    const std::array<float, 11> streams  {{-12.f, -60.f, 6.f, 3.f, 3000.f, 650.f, 65.f, 6.f, -1.f, 0.f, 0.f}};
-    const std::array<float, 11> movies   {{-14.f, -60.f, 3.f, 2.f, 5000.f, 1100.f, 40.f, 4.f, -1.f, 0.f, 0.f}};
+    const std::array<float, 12> baseline {{-12.f, -60.f, 6.f, 3.f, 3000.f, 650.f, 65.f, 6.f, -1.f, 0.f, 0.f, 0.f}};
+    const std::array<float, 12> music    {{-12.f, -60.f, 4.f, 2.f, 4000.f, 900.f, 45.f, 6.f, -1.f, 0.f, 0.f, 0.f}};
+    const std::array<float, 12> streams  {{-12.f, -60.f, 6.f, 3.f, 3000.f, 650.f, 65.f, 6.f, -1.f, 0.f, 0.f, 0.f}};
+    const std::array<float, 12> movies   {{-14.f, -60.f, 3.f, 2.f, 5000.f, 1100.f, 40.f, 4.f, -1.f, 0.f, 0.f, 0.f}};
     const auto& values = presetId == 3 ? music : presetId == 4 ? streams : presetId == 5 ? movies : baseline;
     for (int i = 0; i < numControls; ++i) {
         if (auto* param = processor.apvts.getParameter(ids[i])) {
@@ -256,7 +257,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.5.1  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
+    g.drawText("v0.6.0  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.drawText("DSP AVG " + juce::String(displayedAverageLoad, 2) + "%"
