@@ -66,6 +66,11 @@ public:
     float getAverageBlockLoadPercent() const noexcept { return averageBlockLoad.load(std::memory_order_relaxed); }
     float getMaximumBlockLoadPercent() const noexcept { return maximumBlockLoad.load(std::memory_order_relaxed); }
     float getLastCallbackMicroseconds() const noexcept { return callbackMicroseconds.load(std::memory_order_relaxed); }
+    float getRollingPeakLoadPercent() const noexcept { return rollingPeakLoad.load(std::memory_order_relaxed); }
+    std::uint64_t getDSPSpikeCount() const noexcept { return dspSpikeCount.load(std::memory_order_relaxed); }
+    void requestDSPReset() noexcept { dspResetRevision.fetch_add(1u, std::memory_order_release); }
+    void setDSPSpikeThreshold(float percent) noexcept { dspSpikeThreshold.store(percent, std::memory_order_relaxed); }
+    float getDSPSpikeThreshold() const noexcept { return dspSpikeThreshold.load(std::memory_order_relaxed); }
     // Receives no allocations, locks or GUI callbacks on the audio thread.
 
 private:
@@ -85,6 +90,11 @@ private:
     smoothride::PerformanceTelemetry performance;
     double currentSampleRate = 48000.0;
     std::atomic<float> averageBlockLoad {0.0f}, maximumBlockLoad {0.0f}, callbackMicroseconds {0.0f};
+    std::atomic<float> rollingPeakLoad {0.0f}, dspSpikeThreshold {10.0f};
+    std::atomic<std::uint64_t> dspSpikeCount {0};
+    std::atomic<unsigned int> dspResetRevision {0};
+    unsigned int lastDSPResetRevision = 0;
+
     std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f}, inputBlockRms {0.0f};
     std::atomic<float> rideDb {0.0f}, limiterReductionDb {0.0f};
     std::atomic<float> detectedRmsDb {-160.0f}, requestedRideDb {0.0f}, effectiveFloorDb {-60.0f};

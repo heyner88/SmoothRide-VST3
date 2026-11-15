@@ -170,6 +170,25 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     notice.setJustificationType(juce::Justification::centredRight);
     notice.setFont(juce::Font(juce::FontOptions(11.0f)));
     addAndMakeVisible(notice);
+    resetDSP.setColour(juce::TextButton::buttonColourId, panel);
+    resetDSP.setColour(juce::TextButton::textColourOffId, text);
+    resetDSP.onClick = [this] {
+        processor.requestDSPReset();
+        setNotice("DSP reset requested; updates on next audio block");
+    };
+    addAndMakeVisible(resetDSP);
+    spikeThreshold.addItem("5%", 1);
+    spikeThreshold.addItem("10%", 2);
+    spikeThreshold.addItem("20%", 3);
+    spikeThreshold.addItem("40%", 4);
+    const float initialThreshold = processor.getDSPSpikeThreshold();
+    spikeThreshold.setSelectedId(initialThreshold == 5.f ? 1 : initialThreshold == 20.f ? 3 : initialThreshold == 40.f ? 4 : 2, juce::dontSendNotification);
+    spikeThreshold.onChange = [this] {
+        const float values[] = {5.f, 10.f, 20.f, 40.f};
+        const auto id = spikeThreshold.getSelectedId();
+        if (id >= 1 && id <= 4) processor.setDSPSpikeThreshold(values[id-1]);
+    };
+    addAndMakeVisible(spikeThreshold);
     gainHistory.fill(0.0f);
     rmsHistory.fill(-100.0f);
     // Fixed compact editor: never resize host-owned VST3 windows interactively.
@@ -191,6 +210,8 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedActive = processor.getRiderActive();
     displayedAverageLoad = processor.getAverageBlockLoadPercent();
     displayedPeakLoad = processor.getMaximumBlockLoadPercent();
+    displayedRollingPeak = processor.getRollingPeakLoadPercent();
+    displayedSpikes = processor.getDSPSpikeCount();
     displayedCallbackUs = processor.getLastCallbackMicroseconds();
     comparisonInfo.setText("Output RMS " + juce::String(processor.getRecentOutputRmsDb(), 1)
        + " dBFS   |   Match " + juce::String(processor.getABMatchingDb(), 1) + " dB"
@@ -261,13 +282,16 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.6.1  |  STEREO-LINKED GAIN RIDER", 740, 10, right-740, 30, juce::Justification::centredRight);
+    g.drawText("v0.6.2  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("DSP AVG " + juce::String(displayedAverageLoad, 2) + "%"
-               + "   PEAK " + juce::String(displayedPeakLoad, 2) + "%"
-               + "   LAST " + juce::String(displayedCallbackUs, 0) + " us"
-               + "   LATENCY 0 samples", 273, 12, 470, 24, juce::Justification::centredLeft);
+    g.setFont(juce::Font(juce::FontOptions(11.0f)));
+    g.drawText("AVG " + juce::String(displayedAverageLoad, 2) + "%"
+               + "  PEAK " + juce::String(displayedPeakLoad, 2) + "%"
+               + "  60s " + juce::String(displayedRollingPeak, 2) + "%"
+               + "  SPIKES " + juce::String(static_cast<juce::int64>(displayedSpikes))
+               + "  LAST " + juce::String(displayedCallbackUs, 0) + " us",
+               270, 12, 608, 24, juce::Justification::centredLeft);
 
     // Wide, single-row peak meters: all coordinates stay inside 1080 x 600.
     g.setColour(panel);
@@ -382,6 +406,8 @@ void SmoothRideAudioProcessorEditor::resized() {
     captureB.setBounds(575, 525, 85, 26);
     recallA.setBounds(672, 525, 85, 26);
     recallB.setBounds(762, 525, 85, 26);
+    resetDSP.setBounds(860, 525, 90, 26);
+    spikeThreshold.setBounds(956, 525, 100, 26);
     noiseGuard.setBounds(660, 120, 195, 22);
     matchAB.setBounds(20, 559, 128, 25);
     calibrateA.setBounds(160, 557, 80, 27);

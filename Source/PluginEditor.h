@@ -39,6 +39,9 @@ private:
     juce::ToggleButton matchAB {"MATCH A/B"};
     juce::TextButton calibrateA {"Cal A"}, calibrateB {"Cal B"};
     juce::Label comparisonInfo;
+    juce::TextButton resetDSP {"Reset DSP"};
+    juce::ComboBox spikeThreshold;
+
     juce::ToggleButton noiseGuard {"NOISE GUARD (EXP)"};
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> noiseGuardAttachment;
 
@@ -52,5 +55,8 @@ private:
     bool displayedActive = false;
     float displayedBlockRmsDb = -90.0f;
     float displayedAverageLoad = 0.0f, displayedPeakLoad = 0.0f, displayedCallbackUs = 0.0f;
+    float displayedRollingPeak = 0.0f;
+    std::uint64_t displayedSpikes = 0;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessorEditor)
 };

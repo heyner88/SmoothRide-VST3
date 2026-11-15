@@ -1,6 +1,6 @@
-# SmoothRide v0.6.1
+# SmoothRide v0.6.2
 
-See [README-v0.6.1.md](README-v0.6.1.md) for features, limitations, compatibility and test procedure.
+See [README-v0.6.2.md](README-v0.6.2.md) for features, limitations, compatibility and test procedure.
 
 # SmoothRide v0.5.1
 
@@ -56,3 +56,11 @@ See **README-v0.4.2.md** for comparison features, calibration, and testing.
 
 - Reduced parameter card height slightly and lowered the preset/preset-management rows a few pixels to prevent the preset selector from overlapping the bottom parameter cards.
 - Kept the compact 1080 x 600 fixed-size editor and left the DSP unchanged.
+
+## v0.6.2 DSP monitoring
+
+- `Reset DSP` requests an audio-thread-safe reset of AVG, historical PEAK, recent 60-second PEAK and spike count. A new audio block must run for the display to update.
+- `60s` tracks the maximum callback budget percentage recorded over the last 60 seconds of **monotonic wall time** (the plugin updates the display when new audio callbacks arrive).
+- `SPIKES` counts callbacks whose processing-time budget reached the selected threshold (5%, 10%, 20%, or 40%). Default 10%. The counter is since last monitoring reset.
+- Monitoring is in-memory only; the optional spike threshold is not part of presets and defaults to 10% at plugin initialization.
+- The gain-riding audio algorithm, parameter IDs and saved preset format are unchanged.
