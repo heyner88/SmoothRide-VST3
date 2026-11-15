@@ -58,6 +58,7 @@ private:
     float displayedRollingPeak = 0.0f;
     std::uint64_t displayedSpikes = 0, displayedGuardToggles = 0;
     float displayedLastTogglePercent = 0, displayedLastToggleRiderPercent = 0;
+    float displayedLastTogglePrePercent = 0, displayedLastTogglePostPercent = 0, displayedMonitorUs = 0;
     float displayedLastSpikePercent = 0, displayedLastSpikeUs = 0, displayedLastSpikeBudgetUs = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessorEditor)

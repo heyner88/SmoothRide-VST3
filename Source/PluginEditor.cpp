@@ -221,6 +221,9 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedGuardToggles = dsp.guardToggles;
     displayedLastTogglePercent = dsp.lastTogglePercent;
     displayedLastToggleRiderPercent = dsp.lastToggleRiderPercent;
+    displayedLastTogglePrePercent = dsp.lastTogglePrePercent;
+    displayedLastTogglePostPercent = dsp.lastTogglePostPercent;
+    displayedMonitorUs = dsp.monitorUs;
     comparisonInfo.setText("Output RMS " + juce::String(processor.getRecentOutputRmsDb(), 1)
        + " dBFS   |   Match " + juce::String(processor.getABMatchingDb(), 1) + " dB"
        + "   |   Floor " + juce::String(processor.getEffectiveFloorDb(), 1) + " dB",
@@ -290,7 +293,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.6.4  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
+    g.drawText("v0.6.5  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -307,10 +310,13 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
                + juce::String(displayedLastSpikeUs, 1) + " / "
                + juce::String(displayedLastSpikeBudgetUs, 1) + " us)",
                272, 32, 386, 14, juce::Justification::centredLeft);
-    g.drawText("GUARD TOGGLES " + juce::String(static_cast<juce::int64>(displayedGuardToggles))
+    g.drawText("T " + juce::String(static_cast<juce::int64>(displayedGuardToggles))
                + "  BLOCK " + juce::String(displayedLastTogglePercent, 1) + "%"
-               + "  RIDER " + juce::String(displayedLastToggleRiderPercent, 1) + "%",
-               660, 32, 396, 14, juce::Justification::centredRight);
+               + "  PRE " + juce::String(displayedLastTogglePrePercent, 1) + "%"
+               + "  R " + juce::String(displayedLastToggleRiderPercent, 1) + "%"
+               + "  POST " + juce::String(displayedLastTogglePostPercent, 1) + "%"
+               + "  MON " + juce::String(displayedMonitorUs, 0) + "us",
+               657, 32, 404, 14, juce::Justification::centredRight);
 
     // Wide, single-row peak meters: all coordinates stay inside 1080 x 600.
     g.setColour(panel);

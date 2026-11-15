@@ -43,6 +43,7 @@ void SmoothRideAudioProcessor::prepareToPlay(double sr, int) {
     currentCompareGainLinear = previousCompareGainLinear = 1.f;
     lastSnapshotVersion = snapshotVersion.load(std::memory_order_relaxed);
     performance.reset();
+    lastTelemetrySeconds = 0.0;
     guardStateInitialized = false;
     publishedDSP.publish(performance);
     lastDSPResetRevision = dspResetRevision.load(std::memory_order_acquire);
@@ -64,6 +65,7 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     const auto resetRevision = dspResetRevision.load(std::memory_order_acquire);
     if (resetRevision != lastDSPResetRevision) {
         lastDSPResetRevision = resetRevision;
+        lastTelemetrySeconds = 0.0;
         performance.reset();
         publishedDSP.publish(performance);
         averageBlockLoad.store(0.f, std::memory_order_relaxed);
@@ -175,15 +177,23 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     const auto callbackEnd = std::chrono::steady_clock::now();
     const double seconds = std::chrono::duration<double>(callbackEnd - callbackStart).count();
     const auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(callbackEnd.time_since_epoch()).count();
+    const auto telemetryStart = std::chrono::steady_clock::now();
+    // PRE is all callback work before rider.process; POST is the work after it.
+    // Telemetry bookkeeping runs AFTER callbackEnd and is measured separately.
     performance.record(seconds, buffer.getNumSamples(), currentSampleRate, timestamp,
                        dspSpikeThreshold.load(std::memory_order_relaxed), guardToggled,
-                       std::chrono::duration<double>(riderEnd - riderStart).count());
+                       std::chrono::duration<double>(riderEnd - riderStart).count(),
+                       std::chrono::duration<double>(riderStart - callbackStart).count(),
+                       std::chrono::duration<double>(callbackEnd - riderEnd).count(),
+                       lastTelemetrySeconds);
     averageBlockLoad.store(performance.averagePercent(), std::memory_order_relaxed);
     maximumBlockLoad.store(performance.maximumPercent(), std::memory_order_relaxed);
     rollingPeakLoad.store(performance.rollingPeakPercent(), std::memory_order_relaxed);
     dspSpikeCount.store(performance.spikes(), std::memory_order_relaxed);
     callbackMicroseconds.store(performance.callbackMicroseconds(), std::memory_order_relaxed);
     publishedDSP.publish(performance);
+    lastTelemetrySeconds = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - telemetryStart).count();
 }
 juce::AudioProcessorEditor* SmoothRideAudioProcessor::createEditor() {
     return new SmoothRideAudioProcessorEditor(*this);

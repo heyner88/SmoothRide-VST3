@@ -90,6 +90,7 @@ private:
     double recentPower = 1.e-12;
 
     smoothride::PerformanceTelemetry performance;
+    double lastTelemetrySeconds = 0.0; // previous callback telemetry duration, audio-thread only
     smoothride::PublishedDSPTelemetry publishedDSP;
     double currentSampleRate = 48000.0;
     std::atomic<float> averageBlockLoad {0.0f}, maximumBlockLoad {0.0f}, callbackMicroseconds {0.0f};

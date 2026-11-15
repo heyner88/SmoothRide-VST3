@@ -16,19 +16,26 @@ public:
         spikeCount = 0; lastSpikePercent = lastSpikeMicroseconds = lastSpikeBudgetMicroseconds = 0.0;
         initialized = false; lastRollingSecond = -1;
         toggleCount = 0; lastToggleLoad = lastToggleRiderLoad = 0.0;
+        lastTogglePreLoad = lastTogglePostLoad = 0.0; lastMonitorUs = 0.0;
         for (auto& b : seconds) { b.second = -1; b.peak = 0.0; }
     }
 
     // The clock input allows deterministic tests without sleeps.
     void record(double elapsedSeconds, int sampleCount, double sampleRate,
                 std::int64_t monotonicSecond, double spikeThresholdPercent = 10.0,
-                bool guardToggled = false, double riderSeconds = 0.0) noexcept {
+                bool guardToggled = false, double riderSeconds = 0.0,
+                double preSeconds = 0.0, double postSeconds = 0.0,
+                double monitorSeconds = 0.0) noexcept {
         if (!std::isfinite(elapsedSeconds) || elapsedSeconds < 0.0
                 || sampleCount <= 0 || !std::isfinite(sampleRate) || sampleRate <= 0.0) return;
         const double deadline = static_cast<double>(sampleCount) / sampleRate;
         if (deadline <= 0.0) return;
         const double load = elapsedSeconds / deadline;
         lastMicroseconds = elapsedSeconds * 1.0e6;
+        // Monitoring cost was timed after record/publish in the PREVIOUS callback,
+        // because this callback cannot include its own future telemetry work.
+        lastMonitorUs = std::isfinite(monitorSeconds) && monitorSeconds >= 0.0
+            ? monitorSeconds * 1.0e6 : 0.0;
         if (!initialized) { averageLoad = load; initialized = true; }
         else averageLoad += 0.08 * (load - averageLoad);
         maxLoad = std::max(maxLoad, load);
@@ -37,6 +44,10 @@ public:
             lastToggleLoad = load * 100.0;
             lastToggleRiderLoad = std::isfinite(riderSeconds) && riderSeconds >= 0.0
                 ? std::clamp(riderSeconds / deadline * 100.0, 0.0, lastToggleLoad) : 0.0;
+            lastTogglePreLoad = std::isfinite(preSeconds) && preSeconds >= 0.0
+                ? std::clamp(preSeconds / deadline * 100.0, 0.0, lastToggleLoad) : 0.0;
+            lastTogglePostLoad = std::isfinite(postSeconds) && postSeconds >= 0.0
+                ? std::clamp(postSeconds / deadline * 100.0, 0.0, lastToggleLoad) : 0.0;
         }
         if (std::isfinite(spikeThresholdPercent) && spikeThresholdPercent > 0.0
                 && load * 100.0 >= spikeThresholdPercent) {
@@ -71,6 +82,9 @@ public:
     std::uint64_t guardToggles() const noexcept { return toggleCount; }
     float lastTogglePercent() const noexcept { return static_cast<float>(lastToggleLoad); }
     float lastToggleRiderPercent() const noexcept { return static_cast<float>(lastToggleRiderLoad); }
+    float lastTogglePrePercent() const noexcept { return static_cast<float>(lastTogglePreLoad); }
+    float lastTogglePostPercent() const noexcept { return static_cast<float>(lastTogglePostLoad); }
+    float lastMonitorMicroseconds() const noexcept { return static_cast<float>(lastMonitorUs); }
     float averagePercent() const noexcept { return static_cast<float>(100.0 * averageLoad); }
     float maximumPercent() const noexcept { return static_cast<float>(100.0 * maxLoad); }
     float rollingPeakPercent() const noexcept { return static_cast<float>(100.0 * rollingMaxLoad); }
@@ -85,6 +99,7 @@ private:
     double averageLoad = 0.0, maxLoad = 0.0, rollingMaxLoad = 0.0, lastMicroseconds = 0.0;
     std::uint64_t spikeCount = 0, toggleCount = 0;
     double lastToggleLoad = 0.0, lastToggleRiderLoad = 0.0;
+    double lastTogglePreLoad = 0.0, lastTogglePostLoad = 0.0, lastMonitorUs = 0.0;
     double lastSpikePercent = 0.0, lastSpikeMicroseconds = 0.0, lastSpikeBudgetMicroseconds = 0.0;
     std::int64_t lastRollingSecond = -1;
     bool initialized = false;
@@ -99,6 +114,7 @@ struct DSPSnapshot {
     float lastSpikePercent = 0, lastSpikeUs = 0, lastSpikeBudgetUs = 0;
     std::uint64_t spikes = 0, guardToggles = 0;
     float lastTogglePercent = 0, lastToggleRiderPercent = 0;
+    float lastTogglePrePercent = 0, lastTogglePostPercent = 0, monitorUs = 0;
 };
 class PublishedDSPTelemetry {
 public:
@@ -115,6 +131,9 @@ public:
         toggleCount.store(t.guardToggles(), std::memory_order_seq_cst);
         toggleLoad.store(t.lastTogglePercent(), std::memory_order_seq_cst);
         toggleRiderLoad.store(t.lastToggleRiderPercent(), std::memory_order_seq_cst);
+        togglePreLoad.store(t.lastTogglePrePercent(), std::memory_order_seq_cst);
+        togglePostLoad.store(t.lastTogglePostPercent(), std::memory_order_seq_cst);
+        monitorUs.store(t.lastMonitorMicroseconds(), std::memory_order_seq_cst);
         version.fetch_add(1, std::memory_order_seq_cst); // even: complete
     }
     DSPSnapshot read() const noexcept {
@@ -134,6 +153,9 @@ public:
             result.guardToggles = toggleCount.load(std::memory_order_seq_cst);
             result.lastTogglePercent = toggleLoad.load(std::memory_order_seq_cst);
             result.lastToggleRiderPercent = toggleRiderLoad.load(std::memory_order_seq_cst);
+            result.lastTogglePrePercent = togglePreLoad.load(std::memory_order_seq_cst);
+            result.lastTogglePostPercent = togglePostLoad.load(std::memory_order_seq_cst);
+            result.monitorUs = monitorUs.load(std::memory_order_seq_cst);
             if (version.load(std::memory_order_seq_cst) == before) return result;
         }
         // During a rare busy interval, avoid showing an internally inconsistent frame.
@@ -147,6 +169,7 @@ private:
     std::atomic<float> spikeLoad {0}, spikeDuration {0}, spikeBudget {0};
     std::atomic<std::uint64_t> spikeCount {0}, toggleCount {0};
     std::atomic<float> toggleLoad {0}, toggleRiderLoad {0};
+    std::atomic<float> togglePreLoad {0}, togglePostLoad {0}, monitorUs {0};
     mutable DSPSnapshot lastGood {};
 };
 } // namespace smoothride

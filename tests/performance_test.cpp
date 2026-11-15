@@ -66,5 +66,22 @@ int main() {
     assert(t.guardToggles() == 1 && t.spikes() == 1);
     t.reset(); published.publish(t);
     assert(published.read().guardToggles == 0);
+    // A synthetic toggle callback is accounted as PRE + RIDER + POST.
+    // Monitor work is from the previous block and remains separate from BLOCK.
+    t.record(0.0040, 480, 48000, 4000, 10.0, true,
+             0.0007, 0.0012, 0.0021, 0.00015);
+    published.publish(t);
+    const auto phases = published.read();
+    assert(phases.guardToggles == 1 && phases.spikes == 1);
+    assert(std::abs(phases.lastTogglePercent - 40.f) < 0.001f);
+    assert(std::abs(phases.lastTogglePrePercent - 12.f) < 0.001f);
+    assert(std::abs(phases.lastToggleRiderPercent - 7.f) < 0.001f);
+    assert(std::abs(phases.lastTogglePostPercent - 21.f) < 0.001f);
+    assert(std::abs(phases.monitorUs - 150.f) < 0.01f);
+    assert(std::abs(phases.lastTogglePrePercent + phases.lastToggleRiderPercent
+        + phases.lastTogglePostPercent - phases.lastTogglePercent) < 0.001f);
+    t.reset(); published.publish(t);
+    assert(published.read().lastTogglePostPercent == 0.f);
+    assert(published.read().monitorUs == 0.f);
     std::cout << "Performance telemetry tests passed\n";
 }

@@ -1,6 +1,6 @@
-# SmoothRide v0.6.4
+# SmoothRide v0.6.5
 
-See [README-v0.6.4.md](README-v0.6.4.md) for features, limitations, compatibility and test procedure.
+See [README-v0.6.5.md](README-v0.6.5.md) for features, limitations, compatibility and test procedure.
 
 # SmoothRide v0.5.1
 
@@ -57,7 +57,7 @@ See **README-v0.4.2.md** for comparison features, calibration, and testing.
 - Reduced parameter card height slightly and lowered the preset/preset-management rows a few pixels to prevent the preset selector from overlapping the bottom parameter cards.
 - Kept the compact 1080 x 600 fixed-size editor and left the DSP unchanged.
 
-## v0.6.4 DSP monitoring
+## v0.6.5 DSP monitoring
 
 - `Reset DSP` requests an audio-thread-safe reset of AVG, historical PEAK, recent 60-second PEAK and spike count. A new audio block must run for the display to update.
 - `60s` tracks the maximum callback budget percentage recorded over the last 60 seconds of **monotonic wall time** (the plugin updates the display when new audio callbacks arrive).
@@ -66,8 +66,13 @@ See **README-v0.4.2.md** for comparison features, calibration, and testing.
 - The gain-riding audio algorithm, parameter IDs and saved preset format are unchanged.
 
 
-See README-v0.6.4.md for the telemetry consistency fix.
+See README-v0.6.5.md for the telemetry consistency fix.
 
 
-## v0.6.4 toggle timing diagnostics
+## v0.6.5 toggle timing diagnostics
 The UI now displays GUARD TOGGLES, BLOCK % (whole callback cost during last toggle), and RIDER % (time spent in GainRider during that callback). These are wall-clock measures and can include OS preemption; they do not definitively attribute a spike to CPU work. Reset DSP clears these fields. The audio behavior is unchanged.
+
+
+## v0.6.5 callback timing
+
+On Noise Guard toggle, the telemetry row shows callback **BLOCK**, **PRE**, **RIDER**, and **POST** percentages of the block time budget. PRE includes settings and input analysis; POST includes compensation, output metering, and atomic metrics. MON is telemetry bookkeeping time (microseconds) from the preceding audio callback, which occurs after the BLOCK timer stops. All are wall-clock elapsed times, including any OS preemption; they do not directly measure CPU usage. Reset DSP clears the metrics. No DSP algorithm changes.
