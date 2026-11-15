@@ -18,12 +18,16 @@ struct Settings {
 class GainRider {
 public:
     void prepare(double sr) noexcept { sampleRate = std::max(8000.0, sr); reset(); }
-    void reset() noexcept { power = 0.0; rideDb = 0.0; peakGain = 1.0; }
+    void reset() noexcept { power = 0.0; rideDb = 0.0; peakGain = 1.0; detectedRmsDb = -160.0; requestedRideDb = 0.0; ridingActive = false; }
     void setSettings(Settings s) noexcept { settings = s; }
     float currentRideDb() const noexcept { return (float)rideDb; }
     float currentPeakReductionDb() const noexcept {
         return (float)(20.0 * std::log10(std::max(1.0e-9, peakGain)));
     }
+    // Diagnostics only: never fed back into signal processing.
+    float currentDetectedRmsDb() const noexcept { return (float)detectedRmsDb; }
+    float currentRequestedRideDb() const noexcept { return (float)requestedRideDb; }
+    bool isRidingActive() const noexcept { return ridingActive; }
     void process(float* left, float* right, int numSamples, bool stereo) noexcept {
         if (!left || numSamples <= 0) return;
         const double detect = coeff(250.0); // stereo-linked 250 ms RMS
@@ -47,6 +51,9 @@ public:
             // Threshold gate keeps silence/noise from being amplified.
             const bool active = detectedDb > floor;
             const double desired = active ? std::clamp(target - detectedDb, -maxCut, maxBoost) : 0.0;
+            detectedRmsDb = detectedDb;
+            requestedRideDb = desired;
+            ridingActive = active;
             const double smoothing = !active ? idle : (desired > rideDb ? up : down);
             rideDb = smoothing*rideDb + (1.0-smoothing)*desired;
             // Signal-weighted dry/wet blend with global makeup gain.
@@ -66,5 +73,7 @@ private:
     static double dbToLinear(double db) noexcept { return std::pow(10.0, db/20.0); }
     Settings settings;
     double sampleRate = 48000.0, power = 0.0, rideDb = 0.0, peakGain = 1.0;
+    double detectedRmsDb = -160.0, requestedRideDb = 0.0;
+    bool ridingActive = false;
 };
 }

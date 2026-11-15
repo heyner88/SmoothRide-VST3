@@ -53,7 +53,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     };
     addAndMakeVisible(presets);
     gainHistory.fill(0.0f);
-    setSize(900, 795);
+    setSize(900, 890);
     startTimerHz(10);
 }
 
@@ -64,9 +64,12 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedOutputDb = ampDb(processor.getOutputPeak());
     displayedRideDb = processor.getRideDb();
     displayedPeakReductionDb = processor.getLimiterReductionDb();
+    displayedRmsDb = processor.getDetectedRmsDb();
+    displayedRequestedDb = processor.getRequestedRideDb();
+    displayedActive = processor.getRiderActive();
     gainHistory[(size_t)historyPosition] = displayedRideDb;
     historyPosition = (historyPosition + 1) % (int)gainHistory.size();
-    repaint(juce::Rectangle<int>(18, 60, getWidth()-36, 210));
+    repaint(juce::Rectangle<int>(18, 60, getWidth()-36, 300));
 }
 
 void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
@@ -112,7 +115,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", top.removeFromLeft(240).toNearestInt(), juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText("v0.3  •  STEREO-LINKED GAIN RIDER", top.toNearestInt(), juce::Justification::centredRight);
+    g.drawText("v0.3.1  |  STEREO-LINKED GAIN RIDER", top.toNearestInt(), juce::Justification::centredRight);
 
     const auto meterArea = juce::Rectangle<float>(20, 67, (float)getWidth()-40, 90);
     g.setColour(panel);
@@ -131,7 +134,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(chart, 10.0f);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("GAIN RIDING HISTORY  •  LAST 24 s", 35, 172, 330, 20, juce::Justification::centredLeft);
+    g.drawText("GAIN RIDING HISTORY  |  LAST 24 s", 35, 172, 330, 20, juce::Justification::centredLeft);
     g.setColour(accent);
     g.drawText((displayedRideDb >= 0.f ? "+" : "") + juce::String(displayedRideDb, 1) + " dB",
                getWidth()-167, 172, 135, 20, juce::Justification::centredRight);
@@ -148,7 +151,39 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(accent);
     g.strokePath(path, juce::PathStrokeType(2.0f));
 
-    const int cardX = 20, cardY = 284, cardGap = 10, cardW = (getWidth()-40-2*cardGap)/3, cardH = 140;
+    // Pure telemetry strip: no audio parameters or processing modified.
+    const float diagnosticsY = 282.0f;
+    g.setColour(panel);
+    g.fillRoundedRectangle(20.0f, diagnosticsY, (float)getWidth()-40.0f, 76.0f, 10.0f);
+    const float columnWidth = ((float)getWidth()-70.0f)/3.0f;
+    const auto drawDiagnostic = [&](int col, const juce::String& label,
+                                     const juce::String& value, juce::Colour valueColour) {
+        const int x = 35 + (int)((float)col*(columnWidth+5.0f));
+        g.setColour(faint);
+        g.setFont(juce::Font(juce::FontOptions(12.0f)));
+        g.drawText(label, x, 292, (int)columnWidth, 20, juce::Justification::centredLeft);
+        g.setColour(valueColour);
+        g.setFont(juce::Font(juce::FontOptions(19.0f).withStyle("bold")));
+        g.drawText(value, x, 318, (int)columnWidth, 28, juce::Justification::centredLeft);
+    };
+    drawDiagnostic(0, "DETECTED RMS", juce::String(displayedRmsDb, 1) + " dBFS", text);
+    drawDiagnostic(1, "REQUESTED RIDE", (displayedRequestedDb >= 0.0f ? "+" : "")
+                   + juce::String(displayedRequestedDb, 1) + " dB", text);
+    const auto* floorParam = processor.apvts.getRawParameterValue("floor");
+    const bool belowFloor = !displayedActive;
+    const auto* boostParam = processor.apvts.getRawParameterValue("range");
+    const auto* cutParam = processor.apvts.getRawParameterValue("maxCut");
+    const float boost = boostParam != nullptr ? boostParam->load() : 6.0f;
+    const float cut = cutParam != nullptr ? cutParam->load() : 3.0f;
+    const juce::String riderStatus = belowFloor ? "BELOW FLOOR"
+       : displayedRequestedDb >= boost - 0.05f && boost > 0.0f ? "MAX BOOST"
+       : displayedRequestedDb <= -cut + 0.05f && cut > 0.0f ? "MAX CUT"
+       : "ACTIVE";
+    juce::ignoreUnused(floorParam);
+    drawDiagnostic(2, "RIDER STATUS", riderStatus,
+                   belowFloor ? faint : accent);
+
+    const int cardX = 20, cardY = 375, cardGap = 10, cardW = (getWidth()-40-2*cardGap)/3, cardH = 140;
     for (int i=0; i<numControls; ++i) {
         const int x = cardX + (i%3)*(cardW+cardGap);
         const int y = cardY + (i/3)*(cardH+cardGap);
@@ -158,17 +193,17 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.drawText("Presets change the nine controls above. Current values are saved by the host.",
-               20, 764, getWidth()-40, 22, juce::Justification::centred);
+               20, 856, getWidth()-40, 22, juce::Justification::centred);
 }
 
 void SmoothRideAudioProcessorEditor::resized() {
-    const int cardX = 20, cardY = 284, cardGap = 10, cardW = (getWidth()-40-2*cardGap)/3, cardH = 140;
+    const int cardX = 20, cardY = 375, cardGap = 10, cardW = (getWidth()-40-2*cardGap)/3, cardH = 140;
     for (int i=0; i<numControls; ++i) {
         const int x = cardX + (i%3)*(cardW+cardGap);
         const int y = cardY + (i/3)*(cardH+cardGap);
         labels[(size_t)i]->setBounds(x+10, y+5, cardW-20, 22);
         sliders[(size_t)i]->setBounds(x+20, y+26, cardW-40, cardH-30);
     }
-    presetLabel.setBounds(28, 746, 205, 23);
-    presets.setBounds(235, 738, getWidth()-263, 34);
+    presetLabel.setBounds(28, 839, 205, 23);
+    presets.setBounds(235, 831, getWidth()-263, 34);
 }

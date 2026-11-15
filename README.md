@@ -1,3 +1,7 @@
+# SmoothRide VST3 v0.3.1
+
+See `README-v0.3.1.md` for changes and build instructions.
+
 # SmoothRide v0.3 — live monitoring and custom UI
 
 This is an **experimental VST3 source release**, not an installed binary. The plugin is intended for EqualizerAPO-XT on Windows x64.

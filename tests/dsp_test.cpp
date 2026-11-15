@@ -40,9 +40,19 @@ int main() {
     left=sine(48000*4,0.015f);
     rider.process(left.data(),nullptr,(int)left.size(),false);
     assert(rider.currentRideDb()>5.5f && rider.currentRideDb()<=6.001f);
-    std::cout<<"PASS max boost limit\n";
+    assert(rider.isRidingActive());
+    assert(rider.currentRequestedRideDb() > 5.9f);
+    assert(rider.currentDetectedRmsDb() < s.targetDb);
+    std::cout<<"PASS max boost limit and detector telemetry\n";
     rider.reset(); left=sine(48000*4,0.6f);
     rider.process(left.data(),nullptr,(int)left.size(),false);
     assert(rider.currentRideDb() < -2.5f && rider.currentRideDb()>=-3.001f);
-    std::cout<<"PASS max cut limit\n";
+    assert(rider.currentRequestedRideDb() < -2.9f);
+    std::cout<<"PASS max cut limit and requested-gain telemetry\n";
+    rider.reset();
+    std::vector<float> silence(48000, 0.0f);
+    rider.process(silence.data(), nullptr, (int)silence.size(), false);
+    assert(!rider.isRidingActive());
+    assert(rider.currentRequestedRideDb() == 0.0f);
+    std::cout<<"PASS below-floor status\n";
 }

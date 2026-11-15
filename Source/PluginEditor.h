@@ -29,5 +29,7 @@ private:
     int historyPosition = 0;
     float displayedInputDb = -90.0f, displayedOutputDb = -90.0f;
     float displayedRideDb = 0.0f, displayedPeakReductionDb = 0.0f;
+    float displayedRmsDb = -160.0f, displayedRequestedDb = 0.0f;
+    bool displayedActive = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessorEditor)
 };

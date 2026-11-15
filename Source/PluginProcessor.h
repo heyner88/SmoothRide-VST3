@@ -30,6 +30,9 @@ public:
     float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
     float getRideDb() const noexcept { return rideDb.load(std::memory_order_relaxed); }
     float getLimiterReductionDb() const noexcept { return limiterReductionDb.load(std::memory_order_relaxed); }
+    float getDetectedRmsDb() const noexcept { return detectedRmsDb.load(std::memory_order_relaxed); }
+    float getRequestedRideDb() const noexcept { return requestedRideDb.load(std::memory_order_relaxed); }
+    bool getRiderActive() const noexcept { return riderActive.load(std::memory_order_relaxed); }
     // Receives no allocations, locks or GUI callbacks on the audio thread.
 
 private:
@@ -37,5 +40,7 @@ private:
     smoothride::GainRider rider;
     std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f};
     std::atomic<float> rideDb {0.0f}, limiterReductionDb {0.0f};
+    std::atomic<float> detectedRmsDb {-160.0f}, requestedRideDb {0.0f};
+    std::atomic<bool> riderActive {false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SmoothRideAudioProcessor)
 };

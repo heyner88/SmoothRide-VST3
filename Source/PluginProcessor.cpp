@@ -52,6 +52,9 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     outputPeak.store(outPeak, std::memory_order_relaxed);
     rideDb.store(rider.currentRideDb(), std::memory_order_relaxed);
     limiterReductionDb.store(rider.currentPeakReductionDb(), std::memory_order_relaxed);
+    detectedRmsDb.store(rider.currentDetectedRmsDb(), std::memory_order_relaxed);
+    requestedRideDb.store(rider.currentRequestedRideDb(), std::memory_order_relaxed);
+    riderActive.store(rider.isRidingActive(), std::memory_order_relaxed);
 }
 juce::AudioProcessorEditor* SmoothRideAudioProcessor::createEditor() {
     return new SmoothRideAudioProcessorEditor(*this);
