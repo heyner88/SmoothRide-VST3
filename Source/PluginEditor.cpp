@@ -111,7 +111,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     presetLabel.setColour(juce::Label::textColourId, faint);
     presetLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
     addAndMakeVisible(presetLabel);
-    presets.addItem("Choose a preset (changes parameters)", 1);
+    presets.addItem("Select factory preset", 1);
     presets.addItem("v0.2 Baseline", 2);
     presets.addItem("Music - subtle", 3);
     presets.addItem("Streams - controlled", 4);
@@ -330,7 +330,8 @@ void SmoothRideAudioProcessorEditor::updateView() {
     for (auto* button : { &deletePreset, &importPreset, &exportPreset,
                           &captureA, &captureB, &calibrateA, &calibrateB })
         button->setVisible(advanced);
-    notice.setVisible(!advanced);
+    // Keep operation feedback visible in both modes; its bounds depend on the mode.
+    notice.setVisible(true);
     comparisonInfo.setVisible(false);
     resized();
     // Only controls visibility. Existing parameter values and DSP telemetry remain untouched.
@@ -344,6 +345,15 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     adaptiveFloorSwitch.setButtonText(adaptiveFloorSwitch.getToggleState() ? "ADAPTIVE   ON" : "ADAPTIVE   OFF");
     updatePreset.setEnabled(modified && processor.canUpdateActiveUserPreset());
     revertPreset.setEnabled(modified);
+    // Factory selector reflects the actual loaded factory preset, not an earlier choice.
+    int factorySelection = 1;
+    if (processor.isActivePresetFactory()) {
+        const auto factoryName = processor.getActivePresetName();
+        for (int id = 2; id <= 5; ++id)
+            if (presets.getItemText(id - 1) == factoryName) factorySelection = id;
+    }
+    if (presets.getSelectedId() != factorySelection)
+        presets.setSelectedId(factorySelection, juce::dontSendNotification);
     displayedInputDb = ampDb(processor.getInputPeak());
     displayedOutputDb = ampDb(processor.getOutputPeak());
     displayedInputLDb = ampDb(processor.getInputChannelPeak(0));
@@ -406,6 +416,7 @@ void SmoothRideAudioProcessorEditor::refreshUserPresetList() {
 
 void SmoothRideAudioProcessorEditor::setNotice(const juce::String& message) {
     notice.setText(message, juce::dontSendNotification);
+    notice.setTooltip(message);
 }
 
 void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
@@ -466,10 +477,14 @@ void SmoothRideAudioProcessorEditor::drawMeter(juce::Graphics& g, juce::Rectangl
         const float y = top + (float)(-db)/60.f*trackH;
         g.drawText(juce::String(db), (int)r.getX()-1, (int)y-7, 24, 14, juce::Justification::centredRight);
     }
+    // Independent numeric channel readings: no fabricated peak-hold values.
     g.setColour(juce::Colour(0xffeaf7f5));
-    g.setFont(juce::Font(juce::FontOptions(11.f).withStyle("bold")));
-    g.drawText(juce::String(juce::jmax(leftDb, rightDb), 1) + " dBFS",
-               (int)r.getX(), (int)bottom+21, (int)r.getWidth(), 17, juce::Justification::centred);
+    g.setFont(juce::Font(juce::FontOptions(9.5f).withStyle("bold")));
+    const auto leftText = juce::String(leftDb, 1);
+    const auto rightText = juce::String(rightDb, 1);
+    g.drawFittedText("L " + leftText + "   R " + rightText,
+                     (int)r.getX(), (int)bottom+20, (int)r.getWidth(), 18,
+                     juce::Justification::centred, 1, 0.8f);
 }
 
 void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
@@ -508,7 +523,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(edge);
     g.drawHorizontalLine(49, 14.f, 1067.f);
     g.setColour(mint);
-    g.drawText("v0.9.2", 970, 14, 94, 23, juce::Justification::centredRight);
+    g.drawText("v0.9.3", 970, 14, 94, 23, juce::Justification::centredRight);
 
     // Tall meter wells, plus an expanded central monitoring surface.
     roundedPanel({14.f,58.f,116.f,240.f});
@@ -671,10 +686,11 @@ void SmoothRideAudioProcessorEditor::resized() {
         matchAB.setBounds(350,554,116,27);
         calibrateA.setBounds(475,554,66,27);
         calibrateB.setBounds(546,554,66,27);
-        comparisonInfo.setBounds(618,552,443,31);
-        notice.setBounds(618,552,442,31);
         detailDSP.setBounds(614,551,105,29);
         resetDSP.setBounds(724,554,91,27);
         spikeThreshold.setBounds(821,554,90,27);
+        // The rightmost 140 px are reserved for truncated feedback;
+        // hovering reveals the complete notification.
+        notice.setBounds(917,552,137,31);
     }
 }
