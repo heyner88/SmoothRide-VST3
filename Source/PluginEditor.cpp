@@ -48,9 +48,9 @@ void SmoothRideSkin::drawRotarySlider(juce::Graphics& g,int x,int y,int w,int h,
 void SmoothRideSkin::drawButtonBackground(juce::Graphics& g,juce::Button& b,const juce::Colour&,
                                           bool highlighted,bool down) {
     const auto r=b.getLocalBounds().toFloat().reduced(0.5f);
-    g.setColour(down?juce::Colour(0xff1d6668):highlighted?juce::Colour(0xff1b3c46):juce::Colour(0xff142a33));
+    g.setColour(b.getToggleState()?juce::Colour(0xff155c58):(down?juce::Colour(0xff1d6668):highlighted?juce::Colour(0xff1b3c46):juce::Colour(0xff142a33)));
     g.fillRoundedRectangle(r,6.f);
-    g.setColour(highlighted?juce::Colour(0xff3de9c7):juce::Colour(0xff395965));
+    g.setColour(b.getToggleState()?juce::Colour(0xff3de9c7):(highlighted?juce::Colour(0xff3de9c7):juce::Colour(0xff395965)));
     g.drawRoundedRectangle(r,6.f,1.f);
 }
 
@@ -60,6 +60,8 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     const std::array<juce::String, numControls> names {{ "TARGET RMS", "FLOOR", "MAX BOOST", "MAX CUT",
          "GAIN UP", "GAIN DOWN", "MIX", "OUTPUT GAIN", "CEILING", "HYSTERESIS", "SOFT FLOOR", "ADAPTIVE" }};
     for (int i = 0; i < numControls; ++i) {
+        // Binary parameters have their own clickable switches below.
+        if (i == 10 || i == 11) continue;
         sliders[i] = std::make_unique<juce::Slider>();
         auto& slider = *sliders[i];
         slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -83,7 +85,21 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         addAndMakeVisible(*labels[i]);
         attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, ids[i], slider);
     }
-    presetLabel.setText("FACTORY PRESET", juce::dontSendNotification);
+    for (auto* button : { &softFloorSwitch, &adaptiveFloorSwitch }) {
+        button->setClickingTogglesState(true);
+        button->setColour(juce::TextButton::buttonColourId, panel);
+        button->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff155c58));
+        button->setColour(juce::TextButton::textColourOffId, text);
+        button->setColour(juce::TextButton::textColourOnId, accent);
+        addAndMakeVisible(*button);
+    }
+    softFloorSwitch.setTooltip("Soft Floor: click to turn OFF or ON (0 / 1)");
+    adaptiveFloorSwitch.setTooltip("Adaptive Floor: click to turn OFF or ON (0 / 1)");
+    softFloorAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.apvts, "lowProtect", softFloorSwitch);
+    adaptiveFloorAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.apvts, "adaptiveFloor", adaptiveFloorSwitch);
+    presetLabel.setText("FACTORY", juce::dontSendNotification);
     presetLabel.setColour(juce::Label::textColourId, faint);
     presetLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
     addAndMakeVisible(presetLabel);
@@ -309,6 +325,9 @@ void SmoothRideAudioProcessorEditor::updateView() {
 
 void SmoothRideAudioProcessorEditor::timerCallback() {
     const bool modified = processor.isActivePresetModified();
+    // Reflect APVTS automation, preset recall and mouse clicks in the button text.
+    softFloorSwitch.setButtonText(softFloorSwitch.getToggleState() ? "SOFT FLOOR   ON" : "SOFT FLOOR   OFF");
+    adaptiveFloorSwitch.setButtonText(adaptiveFloorSwitch.getToggleState() ? "ADAPTIVE   ON" : "ADAPTIVE   OFF");
     updatePreset.setEnabled(modified && processor.canUpdateActiveUserPreset());
     revertPreset.setEnabled(modified);
     displayedInputDb = ampDb(processor.getInputPeak());
@@ -462,7 +481,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(edge);
     g.drawHorizontalLine(49, 14.f, 1067.f);
     g.setColour(mint);
-    g.drawText("v0.9.0", 970, 14, 94, 23, juce::Justification::centredRight);
+    g.drawText("v0.9.1", 970, 14, 94, 23, juce::Justification::centredRight);
 
     // Tall meter wells, plus an expanded central monitoring surface.
     roundedPanel({14.f,58.f,116.f,240.f});
@@ -539,7 +558,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     const auto statistic=[&](const juce::String& name, const juce::String& value, int x, int w,juce::Colour color) {
         g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(10.f)));
         g.drawText(name,x,240,w,17,juce::Justification::centred);
-        g.setColour(color);g.setFont(juce::Font(juce::FontOptions(19.f).withStyle("bold")));
+        g.setColour(color);g.setFont(juce::Font(juce::FontOptions(name == "GAIN RIDE" || name == "RIDER STATUS" ? 24.f : 19.f).withStyle("bold")));
         g.drawText(value,x,257,w,31,juce::Justification::centred);
     };
     statistic("DETECTOR RMS",juce::String(displayedRmsDb,1)+" dBFS",155,228,pale);
@@ -567,14 +586,13 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawRoundedRectangle(juce::Rectangle<float>(14.f,480.f,1052.f,112.f),10.f,1.f);
     g.setFont(juce::Font(juce::FontOptions(10.f).withStyle("bold")));
     g.setColour(muted);
-    g.drawText("FACTORY",22,487,87,19,juce::Justification::centredLeft);
     g.setColour(stateColour);
     const juce::String state=modified?"MODIFIED":activePreset.isEmpty()?"CUSTOM":"SAVED";
-    g.drawText(state,388,487,82,19,juce::Justification::centredLeft);
+    g.drawText(state,395,487,82,19,juce::Justification::centredLeft);
     g.setColour(pale);
     g.setFont(juce::Font(juce::FontOptions(11.f)));
     g.drawFittedText(activePreset.isEmpty()?"No active preset":"ACTIVE: "+activePreset,
-                     477,487,421,20,juce::Justification::centredLeft,1);
+                     482,487,420,20,juce::Justification::centredLeft,1);
 
 }
 
@@ -582,16 +600,20 @@ void SmoothRideAudioProcessorEditor::resized() {
     struct Slot {int i,x,w;};
     const Slot slots[]={{0,23,75},{2,105,75},{3,187,75},
                         {4,279,75},{5,361,75},{6,443,75},
-                        {1,537,70},{9,610,70},{10,683,70},{11,756,83},
+                        {1,539,70},{9,614,70},
                         {7,863,94},{8,963,94}};
     for (const auto& item:slots) {
-        labels[(size_t)item.i]->setBounds(item.x,427,item.w,19);
-        sliders[(size_t)item.i]->setBounds(item.x,346,item.w,82);
+        if (labels[(size_t)item.i] != nullptr && sliders[(size_t)item.i] != nullptr) {
+            labels[(size_t)item.i]->setBounds(item.x,427,item.w,19);
+            sliders[(size_t)item.i]->setBounds(item.x,346,item.w,82);
+        }
     }
     // Detection safety controls live in their own reserved footer, not over a knob.
-    noiseGuard.setBounds(585,447,205,23);
-    presetLabel.setBounds(19,483,93,27);
-    presets.setBounds(112,483,269,27);
+    softFloorSwitch.setBounds(685,350,150,32);
+    adaptiveFloorSwitch.setBounds(685,390,150,32);
+    noiseGuard.setBounds(566,445,265,24);
+    presetLabel.setBounds(23,483,76,27);
+    presets.setBounds(104,483,278,27);
     listenView.setBounds(921,483,137,26);
     userPresetList.setBounds(21,518,205,26);
     presetName.setBounds(233,518,205,26);

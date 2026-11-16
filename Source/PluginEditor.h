@@ -39,6 +39,9 @@ private:
     std::array<std::unique_ptr<juce::Slider>, numControls> sliders;
     std::array<std::unique_ptr<juce::Label>, numControls> labels;
     std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, numControls> attachments;
+    // Two-state parameters use dedicated buttons instead of hard-to-drag rotary sliders.
+    juce::TextButton softFloorSwitch {"SOFT FLOOR"}, adaptiveFloorSwitch {"ADAPTIVE FLOOR"};
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> softFloorAttachment, adaptiveFloorAttachment;
     juce::ComboBox presets;
     juce::Label presetLabel;
     juce::ComboBox userPresetList;
