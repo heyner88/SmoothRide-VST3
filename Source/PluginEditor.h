@@ -18,6 +18,7 @@ private:
     void applyPreset(int preset);
     void refreshUserPresetList();
     void setNotice(const juce::String& message);
+    void updateView();
 
     SmoothRideAudioProcessor& processor;
     static constexpr int numControls = 12;
@@ -41,6 +42,7 @@ private:
     juce::Label comparisonInfo;
     juce::TextButton resetDSP {"Reset DSP"};
     juce::ToggleButton detailDSP {"DETAIL DSP"};
+    juce::ToggleButton listenView {"LISTEN VIEW"};
     juce::ComboBox spikeThreshold;
 
     juce::ToggleButton noiseGuard {"NOISE GUARD (EXP)"};

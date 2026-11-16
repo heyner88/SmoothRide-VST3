@@ -197,6 +197,14 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         if (id >= 1 && id <= 4) processor.setDSPSpikeThreshold(values[id-1]);
     };
     addAndMakeVisible(spikeThreshold);
+    listenView.setColour(juce::ToggleButton::textColourId, accent);
+    listenView.setToggleState(true, juce::dontSendNotification);
+    listenView.onClick = [this] {
+        updateView();
+        setNotice(listenView.getToggleState() ? "Listening view" : "Advanced view");
+    };
+    addAndMakeVisible(listenView);
+    updateView();
     gainHistory.fill(0.0f);
     rmsHistory.fill(-100.0f);
     // Fixed compact editor: never resize host-owned VST3 windows interactively.
@@ -206,6 +214,15 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
 }
 
 SmoothRideAudioProcessorEditor::~SmoothRideAudioProcessorEditor() { stopTimer(); }
+
+void SmoothRideAudioProcessorEditor::updateView() {
+    const bool advanced = !listenView.getToggleState();
+    detailDSP.setVisible(advanced);
+    resetDSP.setVisible(advanced);
+    spikeThreshold.setVisible(advanced);
+    // Only controls visibility. Existing parameter values and DSP telemetry remain untouched.
+    repaint();
+}
 
 void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedInputDb = ampDb(processor.getInputPeak());
@@ -314,33 +331,31 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.7.1  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
-    g.setColour(faint);
-    g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("AVG " + juce::String(displayedAverageLoad, 2) + "%"
-               + "  PEAK " + juce::String(displayedPeakLoad, 2) + "%"
-               + "  60s " + juce::String(displayedRollingPeak, 2) + "%"
-               + "  SPIKES " + juce::String(static_cast<juce::int64>(displayedSpikes))
-               + "  LAST " + juce::String(displayedCallbackUs, 0) + " us",
-               270, 12, 608, 24, juce::Justification::centredLeft);
-
-    g.setColour(faint);
-    g.setFont(juce::Font(juce::FontOptions(10.0f)));
-    g.drawText("LAST SPIKE " + juce::String(displayedLastSpikePercent, 2) + "%  ("
-               + juce::String(displayedLastSpikeUs, 1) + " / "
-               + juce::String(displayedLastSpikeBudgetUs, 1) + " us)",
-               272, 32, 386, 14, juce::Justification::centredLeft);
-    g.setFont(juce::Font(juce::FontOptions(9.0f)));
-    g.drawText("T " + juce::String(static_cast<juce::int64>(displayedGuardToggles))
-               + "  BLOCK " + juce::String(displayedLastTogglePercent, 1) + "%"
-               + "  P " + juce::String(displayedToggleParams, 1) + "%"
-               + "  I " + juce::String(displayedToggleInput, 1) + "%"
-               + "  AB " + juce::String(displayedToggleAB, 1) + "%"
-               + (displayedABRunning ? "*" : "")
-               + "  R " + juce::String(displayedLastToggleRiderPercent, 1) + "%"
-               + "  O " + juce::String(displayedLastTogglePostPercent, 1) + "%",
-               652, 32, 408, 14, juce::Justification::centredRight);
+    g.drawText("v0.7.2  |  GAIN RIDER", 922, 10, right-922, 30, juce::Justification::centredRight);
+    if (listenView.getToggleState()) {
+        g.setColour(faint);
+        g.setFont(juce::Font(juce::FontOptions(12.0f)));
+        g.drawText("LISTENING  |  AVG " + juce::String(displayedAverageLoad, 2)
+                   + "%  |  PEAK " + juce::String(displayedPeakLoad, 2) + "%",
+                   270, 13, 455, 25, juce::Justification::centredLeft);
+    } else {
+        g.setColour(faint);
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
+        g.drawText("AVG " + juce::String(displayedAverageLoad, 2) + "%"
+                   + "  PEAK " + juce::String(displayedPeakLoad, 2) + "%"
+                   + "  60s " + juce::String(displayedRollingPeak, 2) + "%"
+                   + "  SPIKES " + juce::String(static_cast<juce::int64>(displayedSpikes))
+                   + "  LAST " + juce::String(displayedCallbackUs, 0) + " us",
+                   270, 12, 405, 24, juce::Justification::centredLeft);
+        g.setFont(juce::Font(juce::FontOptions(10.0f)));
+        g.drawText("LAST SPIKE " + juce::String(displayedLastSpikePercent, 2) + "%  ("
+                   + juce::String(displayedLastSpikeUs, 1) + " / "
+                   + juce::String(displayedLastSpikeBudgetUs, 1) + " us)",
+                   272, 32, 386, 14, juce::Justification::centredLeft);
+        g.setFont(juce::Font(juce::FontOptions(9.0f)));
+        // Full per-toggle timing remains available in the lower diagnostic panel.
+        // Keep this top strip clear of the view-switch controls.
+    }
 
     // Wide, single-row peak meters: all coordinates stay inside 1080 x 600.
     g.setColour(panel);
@@ -359,7 +374,9 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(chart, 8.f);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText((detailDSP.getToggleState()
+    g.drawText((listenView.getToggleState()
+                   ? "GAIN RIDING  /  DETECTOR LEVEL"
+                   : detailDSP.getToggleState()
                    ? "RIDE / RMS   |   BASE P " + juce::String(displayedNormalParams, 3)
                      + "%   P AVG/MAX " + juce::String(displayedToggleParamsMean, 1)
                      + "/" + juce::String(displayedToggleParamsMax, 1)
@@ -444,7 +461,12 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     };
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
-    if (detailDSP.getToggleState()) {
+    if (listenView.getToggleState()) {
+        const auto activeName = userPresetList.getText().isNotEmpty()
+            ? "SELECTED PRESET: " + userPresetList.getText() + "  |  Click Load to apply"
+            : "USER PRESETS: select a saved preset below, then click Load";
+        g.drawText(activeName, 32, 247, 750, 17, juce::Justification::centredLeft);
+    } else if (detailDSP.getToggleState()) {
         g.drawText(eventLine("PEAK", displayedPeakEvent), 32, 247, 700, 11,
                    juce::Justification::centredLeft);
         g.drawText(eventLine("SPIKE", displayedSpikeEvent)
@@ -489,7 +511,8 @@ void SmoothRideAudioProcessorEditor::resized() {
     captureB.setBounds(575, 525, 85, 26);
     recallA.setBounds(672, 525, 85, 26);
     recallB.setBounds(762, 525, 85, 26);
-    detailDSP.setBounds(675, 27, 122, 21);
+    detailDSP.setBounds(674, 13, 112, 26);
+    listenView.setBounds(790, 13, 124, 26);
     resetDSP.setBounds(860, 525, 90, 26);
     spikeThreshold.setBounds(956, 525, 100, 26);
     noiseGuard.setBounds(660, 120, 195, 22);
