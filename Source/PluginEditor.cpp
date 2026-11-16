@@ -40,9 +40,14 @@ void SmoothRideSkin::drawRotarySlider(juce::Graphics& g,int x,int y,int w,int h,
                               juce::Colour(0xff0d222b),center.x+inner,center.y+inner,false);
     g.setGradientFill(grad);
     g.fillEllipse(center.x-inner,center.y-inner,inner*2.f,inner*2.f);
+    // JUCE Graphics has no drawArc() method; draw the highlight using Path.
+    juce::Path highlightArc;
+    const float highlightRadius = inner - 2.f;
+    highlightArc.addCentredArc(center.x, center.y, highlightRadius, highlightRadius, 0.f,
+                              juce::MathConstants<float>::pi * 1.20f,
+                              juce::MathConstants<float>::pi * 1.88f, true);
     g.setColour(juce::Colours::white.withAlpha(0.11f));
-    g.drawArc(center.x-inner+2.f, center.y-inner+2.f,2.f*inner-4.f,2.f*inner-4.f,
-              juce::MathConstants<float>::pi*1.20f,juce::MathConstants<float>::pi*1.88f,1.25f);
+    g.strokePath(highlightArc, juce::PathStrokeType(1.25f));
     const auto pointer=juce::Point<float>(std::sin(a),-std::cos(a));
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.drawLine(center.x+pointer.x*inner*0.30f,center.y+pointer.y*inner*0.30f,
