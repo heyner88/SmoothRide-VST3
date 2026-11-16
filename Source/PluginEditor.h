@@ -32,6 +32,7 @@ private:
     juce::ComboBox userPresetList;
     juce::TextEditor presetName;
     juce::TextButton savePreset {"Save"}, loadPreset {"Load"}, deletePreset {"Delete"};
+    juce::TextButton updatePreset {"Update"}, revertPreset {"Revert"};
     juce::TextButton importPreset {"Import"}, exportPreset {"Export"};
     std::unique_ptr<juce::FileChooser> presetFileChooser;
     juce::TextButton captureA {"Store A"}, captureB {"Store B"};

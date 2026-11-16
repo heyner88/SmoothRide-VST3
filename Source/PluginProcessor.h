@@ -36,6 +36,10 @@ public:
     bool saveUserPreset(const juce::String& name);
     bool loadUserPreset(const juce::String& name);
     bool deleteUserPreset(const juce::String& name);
+    bool canUpdateActiveUserPreset() const;
+    bool isActivePresetModified() const;
+    bool updateActiveUserPreset();
+    bool revertActivePreset();
     // UI/message thread only: persisted preset identity plus a reference snapshot.
     void markActivePreset(const juce::String& name, bool isFactory);
     juce::String getActivePresetName() const;

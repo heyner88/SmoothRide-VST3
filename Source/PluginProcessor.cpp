@@ -323,22 +323,55 @@ bool SmoothRideAudioProcessor::isActivePresetFactory() const {
     return reference.isValid() && (bool)reference.getProperty("factory", false);
 }
 
-juce::String SmoothRideAudioProcessor::getActivePresetDescription() const {
+bool SmoothRideAudioProcessor::canUpdateActiveUserPreset() const {
+    const auto name = getActivePresetName();
+    return name.isNotEmpty() && !isActivePresetFactory()
+        && findNamed(apvts.state.getChildWithName(userBankID), presetID, name).isValid();
+}
+
+bool SmoothRideAudioProcessor::isActivePresetModified() const {
     const auto reference = apvts.state.getChildWithName(activeReferenceID);
-    if (!reference.isValid()) return "CURRENT: Custom settings (no preset loaded)";
+    if (!reference.isValid()) return false;
     const auto name = reference.getProperty("name").toString();
-    if (name.isEmpty()) return "CURRENT: Custom settings (no preset loaded)";
-    const auto saved = readSnapshot(reference, captureParameters());
+    if (name.isEmpty()) return false;
+    auto source = (bool)reference.getProperty("factory", false)
+        ? reference
+        : findNamed(apvts.state.getChildWithName(userBankID), presetID, name);
+    if (!source.isValid()) source = reference; // Old session state can still report modifications.
+    const auto saved = readSnapshot(source, captureParameters());
     const auto current = captureParameters();
-    bool modified = false;
-    for (size_t i = 0; i < saved.size(); ++i) {
-        // Ignore harmless float/parameter quantization differences after host restoration.
-        if (std::abs(saved[i] - current[i]) > 0.02f) {
-            modified = true;
-            break;
-        }
-    }
-    return "ACTIVE PRESET: " + name + (modified ? " (modified)" : "");
+    for (size_t i = 0; i < saved.size(); ++i)
+        if (std::abs(saved[i] - current[i]) > 0.02f) return true;
+    return false;
+}
+
+bool SmoothRideAudioProcessor::updateActiveUserPreset() {
+    if (!canUpdateActiveUserPreset()) return false;
+    const auto name = getActivePresetName();
+    auto preset = findNamed(apvts.state.getChildWithName(userBankID), presetID, name);
+    saveSnapshot(preset, captureParameters());
+    markActivePreset(name, false);
+    return true;
+}
+
+bool SmoothRideAudioProcessor::revertActivePreset() {
+    const auto reference = apvts.state.getChildWithName(activeReferenceID);
+    if (!reference.isValid()) return false;
+    const auto name = reference.getProperty("name").toString();
+    if (name.isEmpty()) return false;
+    const bool factory = (bool)reference.getProperty("factory", false);
+    const auto source = factory
+        ? reference : findNamed(apvts.state.getChildWithName(userBankID), presetID, name);
+    if (!source.isValid()) return false;
+    applyParameters(readSnapshot(source, captureParameters()));
+    markActivePreset(name, factory);
+    return true;
+}
+
+juce::String SmoothRideAudioProcessor::getActivePresetDescription() const {
+    const auto name = getActivePresetName();
+    if (name.isEmpty()) return "CURRENT: Custom settings (no preset loaded)";
+    return "ACTIVE PRESET: " + name + (isActivePresetModified() ? " (modified)" : "");
 }
 
 bool SmoothRideAudioProcessor::saveUserPreset(const juce::String& inputName) {
@@ -346,11 +379,10 @@ bool SmoothRideAudioProcessor::saveUserPreset(const juce::String& inputName) {
     if (name.isEmpty() || name.length() > 40) return false;
     auto bank = ensureUserBank(apvts.state);
     auto preset = findNamed(bank, presetID, name);
-    if (!preset.isValid()) {
-        preset = juce::ValueTree(presetID);
-        preset.setProperty("name", name, nullptr);
-        bank.addChild(preset, -1, nullptr);
-    }
+    if (preset.isValid()) return false; // Save creates a new name; Update explicitly overwrites active.
+    preset = juce::ValueTree(presetID);
+    preset.setProperty("name", name, nullptr);
+    bank.addChild(preset, -1, nullptr);
     saveSnapshot(preset, captureParameters());
     markActivePreset(name, false);
     return true;

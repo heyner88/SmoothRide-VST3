@@ -83,7 +83,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         }
     }
 
-    for (auto* button : {&savePreset, &loadPreset, &deletePreset,
+    for (auto* button : {&savePreset, &loadPreset, &deletePreset, &updatePreset, &revertPreset,
                          &captureA, &captureB, &recallA, &recallB, &importPreset, &exportPreset}) {
         button->setColour(juce::TextButton::buttonColourId, panel);
         button->setColour(juce::TextButton::textColourOffId, text);
@@ -97,7 +97,23 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
             const int idx = names.indexOf(name);
             if (idx >= 0) userPresetList.setSelectedId(idx + 1, juce::dontSendNotification);
             setNotice("Saved: " + name);
-        } else setNotice("Enter a name up to 40 characters");
+        } else setNotice("Name exists or invalid - use Update for active preset");
+    };
+    updatePreset.setTooltip("Overwrite ONLY the active user preset with the current settings");
+    revertPreset.setTooltip("Restore the active preset's saved settings; discards unsaved changes");
+    updatePreset.onClick = [this] {
+        const auto name = processor.getActivePresetName();
+        setNotice(processor.updateActiveUserPreset() ? "Updated: " + name
+                  : "Load a user preset before updating");
+        updatePreset.setEnabled(processor.canUpdateActiveUserPreset() && processor.isActivePresetModified());
+        revertPreset.setEnabled(processor.isActivePresetModified());
+    };
+    revertPreset.onClick = [this] {
+        const auto name = processor.getActivePresetName();
+        setNotice(processor.revertActivePreset() ? "Reverted: " + name
+                  : "No active preset to revert");
+        updatePreset.setEnabled(processor.canUpdateActiveUserPreset() && processor.isActivePresetModified());
+        revertPreset.setEnabled(processor.isActivePresetModified());
     };
     loadPreset.onClick = [this] {
         const auto name = userPresetList.getText();
@@ -235,11 +251,15 @@ void SmoothRideAudioProcessorEditor::updateView() {
     detailDSP.setVisible(advanced);
     resetDSP.setVisible(advanced);
     spikeThreshold.setVisible(advanced);
+    notice.setVisible(!advanced);
     // Only controls visibility. Existing parameter values and DSP telemetry remain untouched.
     repaint();
 }
 
 void SmoothRideAudioProcessorEditor::timerCallback() {
+    const bool modified = processor.isActivePresetModified();
+    updatePreset.setEnabled(modified && processor.canUpdateActiveUserPreset());
+    revertPreset.setEnabled(modified);
     displayedInputDb = ampDb(processor.getInputPeak());
     displayedOutputDb = ampDb(processor.getOutputPeak());
     displayedRideDb = processor.getRideDb();
@@ -348,7 +368,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.7.3  |  GAIN RIDER", 922, 10, right-922, 30, juce::Justification::centredRight);
+    g.drawText("v0.7.4  |  GAIN RIDER", 922, 10, right-922, 30, juce::Justification::centredRight);
     if (listenView.getToggleState()) {
         g.setColour(faint);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
@@ -483,7 +503,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
         const auto selected = userPresetList.getText();
         if (selected.isNotEmpty() && selected != processor.getActivePresetName())
             activeName += "  |  Selected: " + selected + " (click Load)";
-        g.drawText(activeName, 32, 247, 1000, 17, juce::Justification::centredLeft);
+        g.drawText(activeName, 32, 247, 790, 17, juce::Justification::centredLeft);
     } else if (detailDSP.getToggleState()) {
         g.drawText(eventLine("PEAK", displayedPeakEvent), 32, 247, 700, 11,
                    juce::Justification::centredLeft);
@@ -521,7 +541,9 @@ void SmoothRideAudioProcessorEditor::resized() {
     presets.setBounds(178, 493, 300, 25);
     presetName.setBounds(489, 493, 244, 25);
     savePreset.setBounds(739, 493, 71, 25);
-    notice.setBounds(815, 493, 244, 25);
+    updatePreset.setBounds(815, 493, 80, 25);
+    revertPreset.setBounds(901, 493, 80, 25);
+    notice.setBounds(816, 241, 240, 25);
     userPresetList.setBounds(20, 525, 270, 26);
     loadPreset.setBounds(298, 525, 77, 26);
     deletePreset.setBounds(380, 525, 77, 26);

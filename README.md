@@ -1,6 +1,6 @@
-# SmoothRide v0.7.3
+# SmoothRide v0.7.4
 
-See [README-v0.7.3.md](README-v0.7.3.md) for changes and testing.
+See [README-v0.7.4.md](README-v0.7.4.md) for changes and testing.
 
 # SmoothRide v0.6.8
 
@@ -89,14 +89,23 @@ See [README-v0.6.8.md](README-v0.6.8.md) for PRE-stage timing diagnostics and te
 See [README-v0.6.8.md](README-v0.6.8.md).
 
 
-See [README-v0.7.3.md](README-v0.7.3.md) for correlated peak/spike callback IDs and test plan.
+See [README-v0.7.4.md](README-v0.7.4.md) for correlated peak/spike callback IDs and test plan.
 
 
-## v0.7.3 listening view
+## v0.7.4 listening view
 
 LISTEN VIEW is on by default. The interface retains meters, status, graph, all controls, and presets while hiding verbose performance readouts and Reset DSP/spike threshold controls. Uncheck LISTEN VIEW to access the existing advanced UI. The selected preset does not load until Load is clicked. This setting is an editor-only preference (defaults to ON when editor is reopened); it does not affect DSP.
 
 
-## v0.7.3 active preset indicator
+## v0.7.4 active preset indicator
 
 The Listening View displays the actual loaded user/factory preset after editor reopen, and marks it (modified) when current parameter values differ from the loaded snapshot. This information is persisted with the host plugin state; old states remain compatible.
+
+
+## v0.7.4: Active preset workflow
+
+- **Save** creates a new named user preset. It will not silently replace an existing preset.
+- **Update** overwrites only the *active loaded user preset* with current settings (never the merely selected dropdown item).
+- **Revert** restores the active preset from its saved snapshot, discarding unsaved edits. It also works for factory presets.
+- Both actions become available when the active settings are modified. The active preset name and modified marker persist in host state.
+- All DSP processing, audio parameters and preset file formats remain unchanged.
