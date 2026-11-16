@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <chrono>
+#include <cmath>
 
 SmoothRideAudioProcessor::SmoothRideAudioProcessor()
 : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
@@ -227,6 +228,7 @@ const std::array<const char*, 13> snapshotIDs {{
     "output", "ceiling", "gateHyst", "lowProtect", "adaptiveFloor", "noiseGuard"
 }};
 const juce::Identifier userBankID("UserPresets"), presetID("UserPreset"), abID("ABSlot");
+const juce::Identifier activeReferenceID("ActivePresetReference");
 
 juce::ValueTree ensureUserBank(juce::ValueTree root) {
     auto bank = root.getChildWithName(userBankID);
@@ -299,6 +301,46 @@ juce::StringArray SmoothRideAudioProcessor::listUserPresets() const {
     return names;
 }
 
+void SmoothRideAudioProcessor::markActivePreset(const juce::String& name, bool isFactory) {
+    // Metadata belongs to the host state. No audio-thread access or allocations.
+    auto reference = apvts.state.getChildWithName(activeReferenceID);
+    if (!reference.isValid()) {
+        reference = juce::ValueTree(activeReferenceID);
+        apvts.state.addChild(reference, -1, nullptr);
+    }
+    reference.setProperty("name", name, nullptr);
+    reference.setProperty("factory", isFactory, nullptr);
+    saveSnapshot(reference, captureParameters());
+}
+
+juce::String SmoothRideAudioProcessor::getActivePresetName() const {
+    const auto reference = apvts.state.getChildWithName(activeReferenceID);
+    return reference.isValid() ? reference.getProperty("name").toString() : juce::String();
+}
+
+bool SmoothRideAudioProcessor::isActivePresetFactory() const {
+    const auto reference = apvts.state.getChildWithName(activeReferenceID);
+    return reference.isValid() && (bool)reference.getProperty("factory", false);
+}
+
+juce::String SmoothRideAudioProcessor::getActivePresetDescription() const {
+    const auto reference = apvts.state.getChildWithName(activeReferenceID);
+    if (!reference.isValid()) return "CURRENT: Custom settings (no preset loaded)";
+    const auto name = reference.getProperty("name").toString();
+    if (name.isEmpty()) return "CURRENT: Custom settings (no preset loaded)";
+    const auto saved = readSnapshot(reference, captureParameters());
+    const auto current = captureParameters();
+    bool modified = false;
+    for (size_t i = 0; i < saved.size(); ++i) {
+        // Ignore harmless float/parameter quantization differences after host restoration.
+        if (std::abs(saved[i] - current[i]) > 0.02f) {
+            modified = true;
+            break;
+        }
+    }
+    return "ACTIVE PRESET: " + name + (modified ? " (modified)" : "");
+}
+
 bool SmoothRideAudioProcessor::saveUserPreset(const juce::String& inputName) {
     const auto name = inputName.trim();
     if (name.isEmpty() || name.length() > 40) return false;
@@ -310,6 +352,7 @@ bool SmoothRideAudioProcessor::saveUserPreset(const juce::String& inputName) {
         bank.addChild(preset, -1, nullptr);
     }
     saveSnapshot(preset, captureParameters());
+    markActivePreset(name, false);
     return true;
 }
 
@@ -317,6 +360,7 @@ bool SmoothRideAudioProcessor::loadUserPreset(const juce::String& name) {
     auto preset = findNamed(apvts.state.getChildWithName(userBankID), presetID, name);
     if (!preset.isValid()) return false;
     applyParameters(readSnapshot(preset, captureParameters()));
+    markActivePreset(name, false);
     return true;
 }
 
@@ -325,6 +369,10 @@ bool SmoothRideAudioProcessor::deleteUserPreset(const juce::String& name) {
     auto preset = findNamed(bank, presetID, name);
     if (!preset.isValid()) return false;
     bank.removeChild(preset, nullptr);
+    if (!isActivePresetFactory() && getActivePresetName() == name) {
+        auto reference = apvts.state.getChildWithName(activeReferenceID);
+        if (reference.isValid()) apvts.state.removeChild(reference, nullptr);
+    }
     return true;
 }
 

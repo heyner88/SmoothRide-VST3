@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(SmoothRide VERSION 0.7.2 LANGUAGES C CXX)
+project(SmoothRide VERSION 0.7.3 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Clone JUCE next to this CMakeLists.txt: git clone --depth 1 --branch 8.0.12 https://github.com/juce-framework/JUCE.git JUCE

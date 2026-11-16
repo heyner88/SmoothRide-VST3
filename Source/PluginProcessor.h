@@ -36,6 +36,11 @@ public:
     bool saveUserPreset(const juce::String& name);
     bool loadUserPreset(const juce::String& name);
     bool deleteUserPreset(const juce::String& name);
+    // UI/message thread only: persisted preset identity plus a reference snapshot.
+    void markActivePreset(const juce::String& name, bool isFactory);
+    juce::String getActivePresetName() const;
+    bool isActivePresetFactory() const;
+    juce::String getActivePresetDescription() const;
     // Portable .smoothridepreset XML; functions run only on the message thread.
     bool exportUserPreset(const juce::String& name, const juce::File& file, juce::String& error) const;
     bool importUserPreset(const juce::File& file, juce::String& error);

@@ -48,6 +48,13 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     presets.addItem("Streams - controlled", 4);
     presets.addItem("Movies - wider dynamics", 5);
     presets.setSelectedId(1, juce::dontSendNotification);
+    if (processor.isActivePresetFactory()) {
+        const auto loaded = processor.getActivePresetName();
+        for (int id = 2; id <= 5; ++id) {
+            if (presets.getItemText(id - 1) == loaded)
+                presets.setSelectedId(id, juce::dontSendNotification);
+        }
+    }
     presets.onChange = [this] {
         const int selected = presets.getSelectedId();
         if (selected >= 2) applyPreset(selected);
@@ -67,6 +74,14 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         if (name.isNotEmpty()) presetName.setText(name, false);
     };
     refreshUserPresetList();
+    if (!processor.isActivePresetFactory()) {
+        const auto loaded = processor.getActivePresetName();
+        const int idx = processor.listUserPresets().indexOf(loaded);
+        if (idx >= 0) {
+            userPresetList.setSelectedId(idx + 1, juce::dontSendNotification);
+            presetName.setText(loaded, false);
+        }
+    }
 
     for (auto* button : {&savePreset, &loadPreset, &deletePreset,
                          &captureA, &captureB, &recallA, &recallB, &importPreset, &exportPreset}) {
@@ -301,6 +316,8 @@ void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
             param->endChangeGesture();
         }
     }
+    if (presetId >= 2 && presetId <= 5)
+        processor.markActivePreset(presets.getItemText(presetId - 1), true);
 }
 
 void SmoothRideAudioProcessorEditor::drawMeter(juce::Graphics& g, juce::Rectangle<float> r,
@@ -331,7 +348,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.7.2  |  GAIN RIDER", 922, 10, right-922, 30, juce::Justification::centredRight);
+    g.drawText("v0.7.3  |  GAIN RIDER", 922, 10, right-922, 30, juce::Justification::centredRight);
     if (listenView.getToggleState()) {
         g.setColour(faint);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
@@ -462,10 +479,11 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
     if (listenView.getToggleState()) {
-        const auto activeName = userPresetList.getText().isNotEmpty()
-            ? "SELECTED PRESET: " + userPresetList.getText() + "  |  Click Load to apply"
-            : "USER PRESETS: select a saved preset below, then click Load";
-        g.drawText(activeName, 32, 247, 750, 17, juce::Justification::centredLeft);
+        auto activeName = processor.getActivePresetDescription();
+        const auto selected = userPresetList.getText();
+        if (selected.isNotEmpty() && selected != processor.getActivePresetName())
+            activeName += "  |  Selected: " + selected + " (click Load)";
+        g.drawText(activeName, 32, 247, 1000, 17, juce::Justification::centredLeft);
     } else if (detailDSP.getToggleState()) {
         g.drawText(eventLine("PEAK", displayedPeakEvent), 32, 247, 700, 11,
                    juce::Justification::centredLeft);

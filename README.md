@@ -1,6 +1,6 @@
-# SmoothRide v0.7.2
+# SmoothRide v0.7.3
 
-See [README-v0.7.2.md](README-v0.7.2.md) for changes and testing.
+See [README-v0.7.3.md](README-v0.7.3.md) for changes and testing.
 
 # SmoothRide v0.6.8
 
@@ -89,9 +89,14 @@ See [README-v0.6.8.md](README-v0.6.8.md) for PRE-stage timing diagnostics and te
 See [README-v0.6.8.md](README-v0.6.8.md).
 
 
-See [README-v0.7.2.md](README-v0.7.2.md) for correlated peak/spike callback IDs and test plan.
+See [README-v0.7.3.md](README-v0.7.3.md) for correlated peak/spike callback IDs and test plan.
 
 
-## v0.7.2 listening view
+## v0.7.3 listening view
 
 LISTEN VIEW is on by default. The interface retains meters, status, graph, all controls, and presets while hiding verbose performance readouts and Reset DSP/spike threshold controls. Uncheck LISTEN VIEW to access the existing advanced UI. The selected preset does not load until Load is clicked. This setting is an editor-only preference (defaults to ON when editor is reopened); it does not affect DSP.
+
+
+## v0.7.3 active preset indicator
+
+The Listening View displays the actual loaded user/factory preset after editor reopen, and marks it (modified) when current parameter values differ from the loaded snapshot. This information is persisted with the host plugin state; old states remain compatible.
