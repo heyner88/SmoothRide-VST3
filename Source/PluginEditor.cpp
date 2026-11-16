@@ -546,7 +546,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(edge);
     g.drawHorizontalLine(49, 14.f, 1067.f);
     g.setColour(mint);
-    g.drawText("v0.9.4", 970, 14, 94, 23, juce::Justification::centredRight);
+    g.drawText("v1.0 RC1", 970, 14, 94, 23, juce::Justification::centredRight);
 
     // Tall meter wells, plus an expanded central monitoring surface.
     roundedPanel({14.f,58.f,116.f,240.f});
