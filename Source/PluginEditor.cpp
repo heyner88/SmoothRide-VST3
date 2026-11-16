@@ -211,7 +211,7 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     const auto dsp = processor.getDSPSnapshot();
     processor.rememberDSPSnapshot(dsp);
     displayedAverageLoad = dsp.average;
-    displayedPeakLoad = dsp.peak;
+    displayedPeakLoad = dsp.historicalPeakEvent.block; // Exact same callback as PEAK stages
     displayedRollingPeak = dsp.rollingPeak;
     displayedSpikes = dsp.spikes;
     displayedCallbackUs = dsp.callbackUs;
@@ -306,7 +306,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.6.9  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
+    g.drawText("v0.7.0  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -422,7 +422,8 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     // Both records refer to individual callbacks, not the latest Noise Guard toggle.
     // 'T' means the same callback that changed Noise Guard; 'N' means other callback.
     const auto eventLine = [](const juce::String& title, const smoothride::SpikeEvent& e) {
-        return title + " " + juce::String(e.block, 1) + "% "
+        return title + " #" + juce::String(static_cast<juce::int64>(e.callbackId))
+            + " " + juce::String(e.block, 1) + "% "
             + (e.guardToggle ? "T" : "N")
             + "  P " + juce::String(e.params, 1)
             + " I " + juce::String(e.input, 1)

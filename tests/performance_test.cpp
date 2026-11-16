@@ -14,6 +14,9 @@ static void testSpikeEventSnapshots() {
     assert(std::abs(first.historicalPeakEvent.block - 30.f) < .001f);
     assert(std::abs(first.historicalPeakEvent.params - 12.f) < .001f);
     assert(first.historicalPeakEvent.guardToggle);
+    assert(first.historicalPeakEvent.callbackId == 1);
+    assert(first.lastSpikeEvent.callbackId == 1);
+    assert(std::abs(first.peak - first.historicalPeakEvent.block) < 0.0001f);
     assert(std::abs(first.historicalPeakEvent.params + first.historicalPeakEvent.input
                     + first.historicalPeakEvent.ab + first.historicalPeakEvent.rider
                     + first.historicalPeakEvent.output - first.historicalPeakEvent.block) < .001f);
@@ -26,14 +29,19 @@ static void testSpikeEventSnapshots() {
     assert(std::abs(second.historicalPeakEvent.block - 30.f) < .001f);
     assert(std::abs(second.lastSpikeEvent.block - 20.f) < .001f);
     assert(!second.lastSpikeEvent.guardToggle && second.lastSpikeEvent.abEngineRunning);
+    assert(second.historicalPeakEvent.callbackId == 1);
+    assert(second.lastSpikeEvent.callbackId == 2);
+    assert(std::abs(second.peak - second.historicalPeakEvent.block) < 0.0001f);
     // Smaller non-spike does not overwrite event snapshots.
     t.record(.0002, 480, 48000, 102, 10., false);
     published.publish(t);
     assert(published.read().lastSpikeEvent.block == second.lastSpikeEvent.block);
+    assert(published.read().historicalPeakEvent.callbackId == 1);
     t.reset(); published.publish(t);
     const auto cleared = published.read();
     assert(cleared.spikes == 0 && cleared.toggleSpikes == 0 && cleared.normalSpikes == 0);
     assert(cleared.historicalPeakEvent.block == 0 && cleared.lastSpikeEvent.block == 0);
+    assert(cleared.historicalPeakEvent.callbackId == 0 && cleared.lastSpikeEvent.callbackId == 0);
 }
 int main() {
     testSpikeEventSnapshots();
@@ -73,6 +81,7 @@ int main() {
         published.publish(t);
         const auto snap = published.read();
         published.remember(snap);
+        assert(std::abs(snap.peak - snap.historicalPeakEvent.block) < 0.0001f);
         if (snap.spikes > 0) {
             assert(snap.peak >= 10.f);
             assert(snap.lastSpikePercent >= 10.f);

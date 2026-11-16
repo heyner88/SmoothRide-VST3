@@ -13,6 +13,7 @@ namespace smoothride {
 struct SpikeEvent {
     float block = 0.f, params = 0.f, input = 0.f, ab = 0.f, rider = 0.f, output = 0.f;
     bool guardToggle = false, abEngineRunning = false;
+    std::uint64_t callbackId = 0;
 };
 
 class PerformanceTelemetry {
@@ -23,6 +24,7 @@ public:
         initialized = false; lastRollingSecond = -1;
         peakEvent = {}; lastSpikeEvent = {};
         toggleSpikes = normalSpikes = 0;
+        callbackSequence = 0;
         toggleCount = 0; lastToggleLoad = lastToggleRiderLoad = 0.0;
         lastTogglePreLoad = lastTogglePostLoad = 0.0; lastMonitorUs = 0.0;
         lastToggleParamsLoad = lastToggleInputLoad = lastToggleABLoad = 0.0;
@@ -65,7 +67,8 @@ public:
         const SpikeEvent event {
             stagePct(elapsedSeconds), stagePct(parametersSeconds),
             stagePct(inputAnalysisSeconds), stagePct(abPreparationSeconds),
-            stagePct(riderSeconds), stagePct(postSeconds), guardToggled, abEngineRan
+            stagePct(riderSeconds), stagePct(postSeconds), guardToggled, abEngineRan,
+            ++callbackSequence
         };
         if (load > maxLoad) { maxLoad = load; peakEvent = event; }
         if (!guardToggled) {
@@ -160,6 +163,7 @@ private:
     double averageLoad = 0.0, maxLoad = 0.0, rollingMaxLoad = 0.0, lastMicroseconds = 0.0;
     std::uint64_t spikeCount = 0, toggleCount = 0;
     std::uint64_t toggleSpikes = 0, normalSpikes = 0;
+    std::uint64_t callbackSequence = 0;
     SpikeEvent peakEvent {}, lastSpikeEvent {};
     double lastToggleLoad = 0.0, lastToggleRiderLoad = 0.0;
     double lastTogglePreLoad = 0.0, lastTogglePostLoad = 0.0, lastMonitorUs = 0.0;
@@ -195,7 +199,8 @@ public:
     void publish(const PerformanceTelemetry& t) noexcept {
         version.fetch_add(1, std::memory_order_seq_cst); // odd: update in progress
         avg.store(t.averagePercent(), std::memory_order_seq_cst);
-        peak.store(t.maximumPercent(), std::memory_order_seq_cst);
+        // Use the exact captured peak event as the sole source of truth for PEAK.
+        peak.store(t.capturedPeak().block, std::memory_order_seq_cst);
         rolling.store(t.rollingPeakPercent(), std::memory_order_seq_cst);
         callback.store(t.callbackMicroseconds(), std::memory_order_seq_cst);
         spikeCount.store(t.spikes(), std::memory_order_seq_cst);
@@ -268,6 +273,7 @@ private:
     struct AtomicEvent {
         std::atomic<float> block {0}, params {0}, input {0}, ab {0}, rider {0}, output {0};
         std::atomic<bool> guardToggle {false}, abEngineRunning {false};
+        std::atomic<std::uint64_t> callbackId {0};
     };
     static void publishEvent(const SpikeEvent& e, AtomicEvent& out) noexcept {
         out.block.store(e.block, std::memory_order_seq_cst);
@@ -278,6 +284,7 @@ private:
         out.output.store(e.output, std::memory_order_seq_cst);
         out.guardToggle.store(e.guardToggle, std::memory_order_seq_cst);
         out.abEngineRunning.store(e.abEngineRunning, std::memory_order_seq_cst);
+        out.callbackId.store(e.callbackId, std::memory_order_seq_cst);
     }
     static SpikeEvent readEvent(const AtomicEvent& in) noexcept {
         return {in.block.load(std::memory_order_seq_cst),
@@ -287,7 +294,8 @@ private:
                 in.rider.load(std::memory_order_seq_cst),
                 in.output.load(std::memory_order_seq_cst),
                 in.guardToggle.load(std::memory_order_seq_cst),
-                in.abEngineRunning.load(std::memory_order_seq_cst)};
+                in.abEngineRunning.load(std::memory_order_seq_cst),
+                in.callbackId.load(std::memory_order_seq_cst)};
     }
     AtomicEvent peakStages {}, lastSpikeStages {};
     std::atomic<std::uint64_t> toggleSpikeCount {0}, normalSpikeCount {0};
