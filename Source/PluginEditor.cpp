@@ -360,6 +360,18 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedInputRDb = ampDb(processor.getInputChannelPeak(1));
     displayedOutputLDb = ampDb(processor.getOutputChannelPeak(0));
     displayedOutputRDb = ampDb(processor.getOutputChannelPeak(1));
+    const std::array<float, 4> peakValues {{ displayedInputLDb, displayedInputRDb,
+                                            displayedOutputLDb, displayedOutputRDb }};
+    for (size_t channel = 0; channel < heldPeakDb.size(); ++channel) {
+        if (peakValues[channel] >= heldPeakDb[channel]) {
+            heldPeakDb[channel] = peakValues[channel];
+            peakHoldTicks[channel] = 12; // Hold for ~1.2 seconds at 10 Hz.
+        } else if (peakHoldTicks[channel] > 0) {
+            --peakHoldTicks[channel];
+        } else {
+            heldPeakDb[channel] = juce::jmax(peakValues[channel], heldPeakDb[channel] - 2.0f);
+        }
+    }
     displayedRideDb = processor.getRideDb();
     displayedPeakReductionDb = processor.getLimiterReductionDb();
     displayedRmsDb = processor.getDetectedRmsDb();
@@ -403,6 +415,8 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     rmsHistory[(size_t)historyPosition] = displayedRmsDb;
     historyPosition = (historyPosition + 1) % (int)gainHistory.size();
     repaint(juce::Rectangle<int>(14, 0, getWidth()-28, 306));
+    // Active preset state can also change through host automation or preset recall.
+    repaint(juce::Rectangle<int>(388, 482, 530, 29));
 }
 
 void SmoothRideAudioProcessorEditor::refreshUserPresetList() {
@@ -451,6 +465,7 @@ void SmoothRideAudioProcessorEditor::drawMeter(juce::Graphics& g, juce::Rectangl
     const float trackH = bottom - top;
     const float trackWidth = 23.f;
     const float xL = r.getCentreX() - 28.f, xR = r.getCentreX() + 5.f;
+    const size_t offset = caption.startsWithIgnoreCase("INPUT") ? 0u : 2u;
     for (int channel = 0; channel < 2; ++channel) {
         const float x = channel == 0 ? xL : xR;
         const float db = channel == 0 ? leftDb : rightDb;
@@ -464,6 +479,14 @@ void SmoothRideAudioProcessorEditor::drawMeter(juce::Graphics& g, juce::Rectangl
         juce::ColourGradient gradient(amber, x+11.f, top, mint, x+11.f, bottom, false);
         g.setGradientFill(gradient);
         if (fill.getHeight() > .5f) g.fillRoundedRectangle(fill, 2.f);
+        // Thin amber peak-hold line, separate for each real stereo channel.
+        const float holdDb = heldPeakDb[offset + static_cast<size_t>(channel)];
+        if (holdDb > -60.f) {
+            const float heldFraction = juce::jlimit(0.f, 1.f, (holdDb + 60.f) / 60.f);
+            const float markerY = bottom - 3.f - heldFraction * (trackH - 6.f);
+            g.setColour(amber.withAlpha(0.95f));
+            g.drawHorizontalLine(static_cast<int>(markerY), x + 3.f, x + trackWidth - 3.f);
+        }
         g.setColour(juce::Colour(0xff41606b));
         g.drawRoundedRectangle(track, 4.f, 1.f);
         g.setColour(muted);
@@ -523,7 +546,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(edge);
     g.drawHorizontalLine(49, 14.f, 1067.f);
     g.setColour(mint);
-    g.drawText("v0.9.3", 970, 14, 94, 23, juce::Justification::centredRight);
+    g.drawText("v0.9.4", 970, 14, 94, 23, juce::Justification::centredRight);
 
     // Tall meter wells, plus an expanded central monitoring surface.
     roundedPanel({14.f,58.f,116.f,240.f});
@@ -570,8 +593,10 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
         g.strokePath(rms,juce::PathStrokeType(1.35f));
     } else {
         const auto line=[&](const juce::String& t, int y, juce::Colour col=juce::Colour(0xff8ba9b5)) {
-            g.setColour(col); g.setFont(juce::Font(juce::FontOptions(11.f)));
-            g.drawFittedText(t,157,y,766,20,juce::Justification::centredLeft,1);
+            g.setColour(col);
+            g.setFont(juce::Font(juce::FontOptions(y == 101 ? 12.f : 11.f)
+                .withStyle(y == 101 ? "bold" : "Regular")));
+            g.drawFittedText(t,161,y,756,20,juce::Justification::centredLeft,1);
         };
         const auto event=[&](const juce::String& name,const smoothride::SpikeEvent& e) {
             return name+"  #"+juce::String(static_cast<juce::int64>(e.callbackId))
@@ -583,7 +608,9 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
         line("LAST "+juce::String(displayedCallbackUs,1)+" us   |   SPIKES "
            +juce::String(static_cast<juce::int64>(displayedSpikes))
            +"   |   GUARD CHANGES "+juce::String(static_cast<juce::int64>(displayedGuardToggles)),101,pale);
-        line(event("PEAK",displayedPeakEvent),128);
+        g.setColour(juce::Colour(0xff213c45));
+        g.drawHorizontalLine(125, 158.f, 921.f);
+        line(event("PEAK",displayedPeakEvent),128,juce::Colour(0xffe5eeed));
         line(event("SPIKE",displayedSpikeEvent),153);
         line("BASE PARAMS "+juce::String(displayedNormalParams,3)+"%  |  TOGGLE AVG/MAX "
              +juce::String(displayedToggleParamsMean,2)+" / "
@@ -628,9 +655,11 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawRoundedRectangle(juce::Rectangle<float>(14.f,480.f,1052.f,112.f),10.f,1.f);
     g.setFont(juce::Font(juce::FontOptions(10.f).withStyle("bold")));
     g.setColour(muted);
+    // Discrete status dot and a concise state label, without covering preset controls.
     g.setColour(stateColour);
+    g.fillEllipse(391.f, 493.f, 6.f, 6.f);
     const juce::String state=modified?"MODIFIED":activePreset.isEmpty()?"CUSTOM":"SAVED";
-    g.drawText(state,395,487,82,19,juce::Justification::centredLeft);
+    g.drawText(state,403,487,76,19,juce::Justification::centredLeft);
     g.setColour(pale);
     g.setFont(juce::Font(juce::FontOptions(11.f)));
     g.drawFittedText(activePreset.isEmpty()?"No active preset":"ACTIVE: "+activePreset,

@@ -71,6 +71,9 @@ private:
     float displayedInputDb = -90.0f, displayedOutputDb = -90.0f;
     float displayedInputLDb = -90.0f, displayedInputRDb = -90.0f;
     float displayedOutputLDb = -90.0f, displayedOutputRDb = -90.0f;
+    // UI-only peak-hold markers; no additional work in the audio callback.
+    std::array<float, 4> heldPeakDb {{-90.f, -90.f, -90.f, -90.f}};
+    std::array<int, 4> peakHoldTicks {{0, 0, 0, 0}};
     float displayedRideDb = 0.0f, displayedPeakReductionDb = 0.0f;
     float displayedRmsDb = -160.0f, displayedRequestedDb = 0.0f;
     bool displayedActive = false;
