@@ -177,6 +177,14 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         setNotice("DSP reset requested; updates on next audio block");
     };
     addAndMakeVisible(resetDSP);
+    detailDSP.setColour(juce::ToggleButton::textColourId, faint);
+    detailDSP.setToggleState(processor.getDetailedDSPDiagnostics(), juce::dontSendNotification);
+    detailDSP.onClick = [this] {
+        processor.setDetailedDSPDiagnostics(detailDSP.getToggleState());
+        processor.requestDSPReset(); // Never mix detailed and lightweight measurements.
+        setNotice(detailDSP.getToggleState() ? "Detailed timing ON; DSP statistics reset" : "Lightweight timing ON; DSP statistics reset");
+    };
+    addAndMakeVisible(detailDSP);
     spikeThreshold.addItem("5%", 1);
     spikeThreshold.addItem("10%", 2);
     spikeThreshold.addItem("20%", 3);
@@ -306,7 +314,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.7.0  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
+    g.drawText("v0.7.1  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -351,11 +359,13 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillRoundedRectangle(chart, 8.f);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("RIDE / RMS   |   BASE P " + juce::String(displayedNormalParams, 3)
-               + "%   P AVG/MAX " + juce::String(displayedToggleParamsMean, 1)
-               + "/" + juce::String(displayedToggleParamsMax, 1)
-               + "%   RESET " + juce::String(displayedResetUs, 1)
-               + " us   |   NOISE REF "
+    g.drawText((detailDSP.getToggleState()
+                   ? "RIDE / RMS   |   BASE P " + juce::String(displayedNormalParams, 3)
+                     + "%   P AVG/MAX " + juce::String(displayedToggleParamsMean, 1)
+                     + "/" + juce::String(displayedToggleParamsMax, 1)
+                     + "%   RESET " + juce::String(displayedResetUs, 1) + " us"
+                   : "RIDE / RMS   |   LIGHTWEIGHT DSP")
+               + "   |   NOISE REF "
                + (processor.apvts.getRawParameterValue("noiseGuard")->load() >= 0.5f
                    ? juce::String(processor.getNoiseReferenceDb(), 0) + " dB" : "OFF"),
                31, 123, 810, 17,
@@ -434,12 +444,18 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     };
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
-    g.drawText(eventLine("PEAK", displayedPeakEvent), 32, 247, 700, 11,
-               juce::Justification::centredLeft);
-    g.drawText(eventLine("SPIKE", displayedSpikeEvent)
-               + "   COUNTS T:" + juce::String(static_cast<juce::int64>(displayedToggleSpikes))
-               + " N:" + juce::String(static_cast<juce::int64>(displayedNormalSpikes)),
-               32, 257, 900, 11, juce::Justification::centredLeft);
+    if (detailDSP.getToggleState()) {
+        g.drawText(eventLine("PEAK", displayedPeakEvent), 32, 247, 700, 11,
+                   juce::Justification::centredLeft);
+        g.drawText(eventLine("SPIKE", displayedSpikeEvent)
+                   + "   COUNTS T:" + juce::String(static_cast<juce::int64>(displayedToggleSpikes))
+                   + " N:" + juce::String(static_cast<juce::int64>(displayedNormalSpikes)),
+                   32, 257, 900, 11, juce::Justification::centredLeft);
+    } else {
+        g.drawText("LIGHTWEIGHT DSP MONITORING  |  Stage breakdown disabled  |  Noise Guard changes: "
+                   + juce::String(static_cast<juce::int64>(displayedGuardToggles)),
+                   32, 247, 900, 20, juce::Justification::centredLeft);
+    }
 
     // Compact cards leave two rows for user presets and A/B snapshots.
     constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 66;
@@ -473,6 +489,7 @@ void SmoothRideAudioProcessorEditor::resized() {
     captureB.setBounds(575, 525, 85, 26);
     recallA.setBounds(672, 525, 85, 26);
     recallB.setBounds(762, 525, 85, 26);
+    detailDSP.setBounds(675, 27, 122, 21);
     resetDSP.setBounds(860, 525, 90, 26);
     spikeThreshold.setBounds(956, 525, 100, 26);
     noiseGuard.setBounds(660, 120, 195, 22);

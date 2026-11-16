@@ -40,6 +40,7 @@ private:
     juce::TextButton calibrateA {"Cal A"}, calibrateB {"Cal B"};
     juce::Label comparisonInfo;
     juce::TextButton resetDSP {"Reset DSP"};
+    juce::ToggleButton detailDSP {"DETAIL DSP"};
     juce::ComboBox spikeThreshold;
 
     juce::ToggleButton noiseGuard {"NOISE GUARD (EXP)"};

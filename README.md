@@ -1,6 +1,6 @@
-# SmoothRide v0.7.0
+# SmoothRide v0.7.1
 
-See [README-v0.7.0.md](README-v0.7.0.md) for changes and testing.
+See [README-v0.7.1.md](README-v0.7.1.md) for changes and testing.
 
 # SmoothRide v0.6.8
 
@@ -89,4 +89,4 @@ See [README-v0.6.8.md](README-v0.6.8.md) for PRE-stage timing diagnostics and te
 See [README-v0.6.8.md](README-v0.6.8.md).
 
 
-See [README-v0.7.0.md](README-v0.7.0.md) for correlated peak/spike callback IDs and test plan.
+See [README-v0.7.1.md](README-v0.7.1.md) for correlated peak/spike callback IDs and test plan.
