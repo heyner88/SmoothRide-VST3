@@ -38,7 +38,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         addAndMakeVisible(*labels[i]);
         attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, ids[i], slider);
     }
-    presetLabel.setText("OPTIONAL STARTING PRESET", juce::dontSendNotification);
+    presetLabel.setText("FACTORY PRESET", juce::dontSendNotification);
     presetLabel.setColour(juce::Label::textColourId, faint);
     presetLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
     addAndMakeVisible(presetLabel);
@@ -47,6 +47,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     presets.addItem("Music - subtle", 3);
     presets.addItem("Streams - controlled", 4);
     presets.addItem("Movies - wider dynamics", 5);
+    presets.setTooltip("Factory presets apply immediately. Saved user presets require Load.");
     presets.setSelectedId(1, juce::dontSendNotification);
     if (processor.isActivePresetFactory()) {
         const auto loaded = processor.getActivePresetName();
@@ -68,7 +69,8 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     presetName.setInputRestrictions(40);
     addAndMakeVisible(presetName);
     addAndMakeVisible(userPresetList);
-    userPresetList.setTextWhenNothingSelected("Saved presets");
+    userPresetList.setTextWhenNothingSelected("Select a saved preset");
+    userPresetList.setTooltip("Selecting a user preset does not load it. Click Load to apply.");
     userPresetList.onChange = [this] {
         const auto name = userPresetList.getText();
         if (name.isNotEmpty()) presetName.setText(name, false);
@@ -89,6 +91,9 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         button->setColour(juce::TextButton::textColourOffId, text);
         addAndMakeVisible(*button);
     }
+    savePreset.setTooltip("Save as a new named preset; existing presets are never overwritten");
+    loadPreset.setTooltip("Load the selected user preset");
+    deletePreset.setTooltip("Permanently delete the selected user preset from this plugin state");
     savePreset.onClick = [this] {
         const auto name = presetName.getText().trim();
         if (processor.saveUserPreset(name)) {
@@ -368,7 +373,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.7.4  |  GAIN RIDER", 922, 10, right-922, 30, juce::Justification::centredRight);
+    g.drawText("v0.8.0  |  GAIN RIDER", 922, 10, right-922, 30, juce::Justification::centredRight);
     if (listenView.getToggleState()) {
         g.setColour(faint);
         g.setFont(juce::Font(juce::FontOptions(12.0f)));
@@ -499,11 +504,27 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(9.0f)));
     if (listenView.getToggleState()) {
-        auto activeName = processor.getActivePresetDescription();
+        // A compact status chip separates the loaded configuration from the
+        // dropdown selection. Never conflate selection with loading a preset.
+        const auto activePreset = processor.getActivePresetName();
+        const bool modified = processor.isActivePresetModified();
+        const juce::String state = activePreset.isEmpty() ? "CUSTOM" : modified ? "MODIFIED" : "SAVED";
+        const auto chipColour = modified ? juce::Colour(0xffffbb6a)
+            : activePreset.isEmpty() ? faint : accent;
+        g.setColour(chipColour.withAlpha(0.15f));
+        g.fillRoundedRectangle(juce::Rectangle<float>(31.f, 246.f, 91.f, 19.f), 5.f);
+        g.setColour(chipColour);
+        g.setFont(juce::Font(juce::FontOptions(10.f).withStyle("bold")));
+        g.drawText(state, 34, 247, 85, 17, juce::Justification::centred);
+        g.setColour(text);
+        g.setFont(juce::Font(juce::FontOptions(11.f)));
+        juce::String activeText = activePreset.isEmpty() ? "Unsaved custom settings"
+            : "ACTIVE: " + activePreset;
         const auto selected = userPresetList.getText();
-        if (selected.isNotEmpty() && selected != processor.getActivePresetName())
-            activeName += "  |  Selected: " + selected + " (click Load)";
-        g.drawText(activeName, 32, 247, 790, 17, juce::Justification::centredLeft);
+        if (selected.isNotEmpty() && selected != activePreset)
+            activeText += "  |  Selected: " + selected + " (Load to apply)";
+        g.drawFittedText(activeText, 130, 246, 667, 20,
+                         juce::Justification::centredLeft, 1);
     } else if (detailDSP.getToggleState()) {
         g.drawText(eventLine("PEAK", displayedPeakEvent), 32, 247, 700, 11,
                    juce::Justification::centredLeft);

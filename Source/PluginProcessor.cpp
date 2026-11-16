@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "PresetWorkflowPolicy.h"
 #include <chrono>
 #include <cmath>
 
@@ -340,9 +341,7 @@ bool SmoothRideAudioProcessor::isActivePresetModified() const {
     if (!source.isValid()) source = reference; // Old session state can still report modifications.
     const auto saved = readSnapshot(source, captureParameters());
     const auto current = captureParameters();
-    for (size_t i = 0; i < saved.size(); ++i)
-        if (std::abs(saved[i] - current[i]) > 0.02f) return true;
-    return false;
+    return smoothride::preset::isModified(saved, current);
 }
 
 bool SmoothRideAudioProcessor::updateActiveUserPreset() {
@@ -376,10 +375,10 @@ juce::String SmoothRideAudioProcessor::getActivePresetDescription() const {
 
 bool SmoothRideAudioProcessor::saveUserPreset(const juce::String& inputName) {
     const auto name = inputName.trim();
-    if (name.isEmpty() || name.length() > 40) return false;
     auto bank = ensureUserBank(apvts.state);
     auto preset = findNamed(bank, presetID, name);
-    if (preset.isValid()) return false; // Save creates a new name; Update explicitly overwrites active.
+    if (!smoothride::preset::mayCreate(static_cast<std::size_t>(name.length()), preset.isValid()))
+        return false; // Save creates a new name; Update explicitly overwrites active.
     preset = juce::ValueTree(presetID);
     preset.setProperty("name", name, nullptr);
     bank.addChild(preset, -1, nullptr);
