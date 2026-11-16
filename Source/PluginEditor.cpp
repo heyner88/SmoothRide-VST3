@@ -3,22 +3,67 @@
 #include <cmath>
 
 namespace {
-const juce::Colour bg (0xff101721), panel (0xff1c2835), accent (0xff54ddc4);
-const juce::Colour faint (0xff879aab), text (0xffedf4f8);
+const juce::Colour panel (0xff10232b), accent (0xff3de9c7);
+const juce::Colour faint (0xff8ba9b5), text (0xffeff8f7);
 float ampDb(float a) noexcept {
     return juce::Decibels::gainToDecibels(juce::jmax(0.0f, a), -90.0f);
 }
+ }
+
+SmoothRideSkin::SmoothRideSkin() {
+    setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff142a33));
+    setColour(juce::ComboBox::outlineColourId,juce::Colour(0xff385760));
+    setColour(juce::ComboBox::textColourId,juce::Colour(0xffeff8f7));
+    setColour(juce::ComboBox::arrowColourId,juce::Colour(0xff3de9c7));
+    setColour(juce::PopupMenu::backgroundColourId,juce::Colour(0xff10232b));
+    setColour(juce::PopupMenu::textColourId,juce::Colour(0xffeff8f7));
+    setColour(juce::PopupMenu::highlightedBackgroundColourId,juce::Colour(0xff24525b));
+    setColour(juce::ToggleButton::tickColourId,juce::Colour(0xff3de9c7));
+}
+void SmoothRideSkin::drawRotarySlider(juce::Graphics& g,int x,int y,int w,int h,
+                 float pos,float start,float end,juce::Slider&) {
+    const auto center=juce::Point<float>(x+w*0.5f,y+h*0.46f);
+    const float radius=juce::jmin((float)w*0.37f,(float)h*0.36f);
+    const float a=start+pos*(end-start);
+    g.setColour(juce::Colour(0xff041015));
+    g.fillEllipse(center.x-radius-2.f,center.y-radius-2.f,2.f*radius+4.f,2.f*radius+4.f);
+    juce::Path ring;
+    ring.addCentredArc(center.x,center.y,radius,radius,0.f,start,end,true);
+    g.setColour(juce::Colour(0xff32535b));
+    g.strokePath(ring,juce::PathStrokeType(4.5f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+    juce::Path lit;
+    lit.addCentredArc(center.x,center.y,radius,radius,0.f,start,a,true);
+    g.setColour(juce::Colour(0xff3de9c7));
+    g.strokePath(lit,juce::PathStrokeType(4.5f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+    const float inner=radius-6.f;
+    juce::ColourGradient grad(juce::Colour(0xff35525c),center.x-inner,center.y-inner,
+                              juce::Colour(0xff0d222b),center.x+inner,center.y+inner,false);
+    g.setGradientFill(grad);
+    g.fillEllipse(center.x-inner,center.y-inner,inner*2.f,inner*2.f);
+    const auto pointer=juce::Point<float>(std::sin(a),-std::cos(a));
+    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.drawLine(center.x+pointer.x*inner*0.30f,center.y+pointer.y*inner*0.30f,
+               center.x+pointer.x*inner*0.78f,center.y+pointer.y*inner*0.78f,2.2f);
+}
+void SmoothRideSkin::drawButtonBackground(juce::Graphics& g,juce::Button& b,const juce::Colour&,
+                                          bool highlighted,bool down) {
+    const auto r=b.getLocalBounds().toFloat().reduced(0.5f);
+    g.setColour(down?juce::Colour(0xff1d6668):highlighted?juce::Colour(0xff1b3c46):juce::Colour(0xff142a33));
+    g.fillRoundedRectangle(r,6.f);
+    g.setColour(highlighted?juce::Colour(0xff3de9c7):juce::Colour(0xff395965));
+    g.drawRoundedRectangle(r,6.f,1.f);
 }
 
 SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioProcessor& p)
     : juce::AudioProcessorEditor(&p), processor(p) {
+    setLookAndFeel(&skin);
     const std::array<juce::String, numControls> names {{ "TARGET RMS", "FLOOR", "MAX BOOST", "MAX CUT",
-         "GAIN UP", "GAIN DOWN", "MIX", "OUTPUT", "CEILING", "FLOOR HYST", "SOFT FLOOR", "ADAPTIVE FLOOR" }};
+         "GAIN UP", "GAIN DOWN", "MIX", "OUTPUT GAIN", "CEILING", "HYSTERESIS", "SOFT FLOOR", "ADAPTIVE" }};
     for (int i = 0; i < numControls; ++i) {
         sliders[i] = std::make_unique<juce::Slider>();
         auto& slider = *sliders[i];
         slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 100, 17);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 86, 20);
         slider.setColour(juce::Slider::rotarySliderFillColourId, accent);
         slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff354555));
         slider.setColour(juce::Slider::thumbColourId, text);
@@ -26,7 +71,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         slider.setColour(juce::Slider::textBoxBackgroundColourId, panel);
         if (ids[i] == "speed" || ids[i] == "downSpeed") slider.setTextValueSuffix(" ms");
-        else if (ids[i] == "lowProtect" || ids[i] == "adaptiveFloor") slider.setTextValueSuffix(" (0=OFF, 1=ON)");
+        else if (ids[i] == "lowProtect" || ids[i] == "adaptiveFloor") slider.setTextValueSuffix("");
         else if (ids[i] == "mix") slider.setTextValueSuffix(" %");
         else slider.setTextValueSuffix(" dB");
         addAndMakeVisible(slider);
@@ -34,7 +79,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         labels[i]->setText(names[i], juce::dontSendNotification);
         labels[i]->setJustificationType(juce::Justification::centred);
         labels[i]->setColour(juce::Label::textColourId, faint);
-        labels[i]->setFont(juce::Font(juce::FontOptions(11.0f).withStyle("bold")));
+        labels[i]->setFont(juce::Font(juce::FontOptions(10.0f).withStyle("bold")));
         addAndMakeVisible(*labels[i]);
         attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, ids[i], slider);
     }
@@ -249,7 +294,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
     startTimerHz(10);
 }
 
-SmoothRideAudioProcessorEditor::~SmoothRideAudioProcessorEditor() { stopTimer(); }
+SmoothRideAudioProcessorEditor::~SmoothRideAudioProcessorEditor() { stopTimer(); setLookAndFeel(nullptr); }
 
 void SmoothRideAudioProcessorEditor::updateView() {
     const bool advanced = !listenView.getToggleState();
@@ -257,6 +302,7 @@ void SmoothRideAudioProcessorEditor::updateView() {
     resetDSP.setVisible(advanced);
     spikeThreshold.setVisible(advanced);
     notice.setVisible(!advanced);
+    comparisonInfo.setVisible(false);
     // Only controls visibility. Existing parameter values and DSP telemetry remain untouched.
     repaint();
 }
@@ -309,7 +355,7 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     gainHistory[(size_t)historyPosition] = displayedRideDb;
     rmsHistory[(size_t)historyPosition] = displayedRmsDb;
     historyPosition = (historyPosition + 1) % (int)gainHistory.size();
-    repaint(juce::Rectangle<int>(18, 8, getWidth()-36, 266));
+    repaint(juce::Rectangle<int>(14, 0, getWidth()-28, 306));
 }
 
 void SmoothRideAudioProcessorEditor::refreshUserPresetList() {
@@ -346,241 +392,227 @@ void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
 }
 
 void SmoothRideAudioProcessorEditor::drawMeter(juce::Graphics& g, juce::Rectangle<float> r,
-                                               float levelDb, const juce::String& name) const {
-    g.setColour(faint);
-    g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText(name, r.removeFromTop(21).toNearestInt(), juce::Justification::centredLeft);
-    g.setColour(juce::Colour(0xff344353));
-    g.fillRoundedRectangle(r.reduced(0, 8), 5.0f);
-    const float fraction = juce::jlimit(0.0f, 1.0f, (levelDb + 60.0f) / 60.0f);
-    auto fill = r.reduced(0, 8);
-    fill.setWidth(fill.getWidth() * fraction);
-    g.setColour(levelDb > -3.0f ? juce::Colour(0xffffa65c) : accent);
-    g.fillRoundedRectangle(fill, 5.0f);
-    g.setColour(text);
-    g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText(juce::String(levelDb, 1) + " dBFS", r.toNearestInt(), juce::Justification::centredRight);
+                                               float levelDb, const juce::String& caption) const {
+    const auto muted = juce::Colour(0xff8ba9b5);
+    const auto mint = juce::Colour(0xff3de9c7);
+    g.setColour(muted);
+    g.setFont(juce::Font(juce::FontOptions(11.0f).withStyle("bold")));
+    g.drawText(caption, r.removeFromTop(24).toNearestInt(), juce::Justification::centred);
+    const float valueY = r.getBottom() - 24.0f;
+    const auto track = juce::Rectangle<float>(r.getCentreX()-16.f, r.getY()+8.f, 32.f, valueY-r.getY()-14.f);
+    g.setColour(juce::Colour(0xff070f15));
+    g.fillRoundedRectangle(track, 5.f);
+    const float fraction = juce::jlimit(0.0f, 1.0f, (levelDb+60.0f)/60.0f);
+    auto fill = track.reduced(3.0f);
+    const float fillBottom = fill.getBottom();
+    const float fillHeight = fill.getHeight() * fraction;
+    fill.setY(fillBottom - fillHeight);
+    fill.setHeight(fillHeight);
+    juce::ColourGradient gradient(mint, fill.getCentreX(), track.getBottom(),
+                                  juce::Colour(0xffffcc70), fill.getCentreX(), track.getY(), false);
+    g.setGradientFill(gradient);
+    if (fill.getHeight() > 0.5f) g.fillRoundedRectangle(fill, 3.f);
+    g.setColour(juce::Colour(0xff38545c));
+    g.drawRoundedRectangle(track, 5.f, 1.f);
+    g.setFont(juce::Font(juce::FontOptions(10.0f)));
+    g.setColour(muted);
+    for (int db=0; db>=-60; db-=12) {
+        float y=track.getY()+(float)(-db)/60.f*track.getHeight();
+        g.drawText(juce::String(db), (int)r.getX()+2, (int)y-7, 27, 14, juce::Justification::centredRight);
+    }
+    g.setColour(juce::Colour(0xffeaf7f5));
+    g.setFont(juce::Font(juce::FontOptions(12.0f).withStyle("bold")));
+    g.drawText(juce::String(levelDb, 1) + " dBFS", (int)r.getX(), (int)valueY, (int)r.getWidth(), 21,
+               juce::Justification::centred);
 }
 
 void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
-    g.fillAll(bg);
-    constexpr int margin = 18;
-    const int right = getWidth() - margin;
-    const int innerWidth = getWidth() - 2 * margin;
-
-    g.setColour(text);
-    g.setFont(juce::Font(juce::FontOptions(24.0f).withStyle("bold")));
-    g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
-    g.setColour(accent);
-    g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.8.0  |  GAIN RIDER", 922, 10, right-922, 30, juce::Justification::centredRight);
-    if (listenView.getToggleState()) {
-        g.setColour(faint);
-        g.setFont(juce::Font(juce::FontOptions(12.0f)));
-        g.drawText("LISTENING  |  AVG " + juce::String(displayedAverageLoad, 2)
-                   + "%  |  PEAK " + juce::String(displayedPeakLoad, 2) + "%",
-                   270, 13, 455, 25, juce::Justification::centredLeft);
-    } else {
-        g.setColour(faint);
-        g.setFont(juce::Font(juce::FontOptions(11.0f)));
-        g.drawText("AVG " + juce::String(displayedAverageLoad, 2) + "%"
-                   + "  PEAK " + juce::String(displayedPeakLoad, 2) + "%"
-                   + "  60s " + juce::String(displayedRollingPeak, 2) + "%"
-                   + "  SPIKES " + juce::String(static_cast<juce::int64>(displayedSpikes))
-                   + "  LAST " + juce::String(displayedCallbackUs, 0) + " us",
-                   270, 12, 405, 24, juce::Justification::centredLeft);
-        g.setFont(juce::Font(juce::FontOptions(10.0f)));
-        g.drawText("LAST SPIKE " + juce::String(displayedLastSpikePercent, 2) + "%  ("
-                   + juce::String(displayedLastSpikeUs, 1) + " / "
-                   + juce::String(displayedLastSpikeBudgetUs, 1) + " us)",
-                   272, 32, 386, 14, juce::Justification::centredLeft);
-        g.setFont(juce::Font(juce::FontOptions(9.0f)));
-        // Full per-toggle timing remains available in the lower diagnostic panel.
-        // Keep this top strip clear of the view-switch controls.
-    }
-
-    // Wide, single-row peak meters: all coordinates stay inside 1080 x 600.
-    g.setColour(panel);
-    g.fillRoundedRectangle(juce::Rectangle<float>((float)margin, 49.f, (float)innerWidth, 63.f), 8.f);
-    drawMeter(g, {31.f, 55.f, 405.f, 49.f}, displayedInputDb, "INPUT PEAK");
-    drawMeter(g, {451.f, 55.f, 405.f, 49.f}, displayedOutputDb, "OUTPUT PEAK");
-    g.setColour(faint);
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("LIMITER", 865, 56, 180, 20, juce::Justification::centred);
-    g.setColour(text);
-    g.setFont(juce::Font(juce::FontOptions(17.0f).withStyle("bold")));
-    g.drawText(juce::String(-displayedPeakReductionDb, 1) + " dB", 865, 77, 180, 25, juce::Justification::centred);
-
-    const auto chart = juce::Rectangle<float>((float)margin, 120.f, (float)innerWidth, 72.f);
-    g.setColour(panel);
-    g.fillRoundedRectangle(chart, 8.f);
-    g.setColour(faint);
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText((listenView.getToggleState()
-                   ? "GAIN RIDING  /  DETECTOR LEVEL"
-                   : detailDSP.getToggleState()
-                   ? "RIDE / RMS   |   BASE P " + juce::String(displayedNormalParams, 3)
-                     + "%   P AVG/MAX " + juce::String(displayedToggleParamsMean, 1)
-                     + "/" + juce::String(displayedToggleParamsMax, 1)
-                     + "%   RESET " + juce::String(displayedResetUs, 1) + " us"
-                   : "RIDE / RMS   |   LIGHTWEIGHT DSP")
-               + "   |   NOISE REF "
-               + (processor.apvts.getRawParameterValue("noiseGuard")->load() >= 0.5f
-                   ? juce::String(processor.getNoiseReferenceDb(), 0) + " dB" : "OFF"),
-               31, 123, 810, 17,
-               juce::Justification::centredLeft);
-    g.setColour(accent);
-    g.drawText((displayedRideDb >= 0.f ? "+" : "") + juce::String(displayedRideDb, 1) + " dB",
-               right-148, 123, 132, 17, juce::Justification::centredRight);
-    const auto plot = juce::Rectangle<float>(34.f, 144.f, (float)getWidth()-68.f, 40.f);
-    g.setColour(juce::Colour(0xff516272));
-    g.drawHorizontalLine((int)plot.getCentreY(), plot.getX(), plot.getRight());
-    juce::Path path;
-    for (size_t k=0; k<gainHistory.size(); ++k) {
-        const auto idx = (historyPosition + (int)k) % (int)gainHistory.size();
-        const float x = plot.getX() + (float)k / (float)(gainHistory.size()-1) * plot.getWidth();
-        const float y = plot.getCentreY() - juce::jlimit(-12.f, 12.f, gainHistory[(size_t)idx]) / 12.f * plot.getHeight()/2.f;
-        if (k == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
-    }
-    g.setColour(accent);
-    g.strokePath(path, juce::PathStrokeType(2.0f));
-    // Blue trace: detector RMS, separately scaled from gain to -100..0 dBFS.
-    juce::Path rmsPath;
-    for (size_t k=0; k<rmsHistory.size(); ++k) {
-        const auto idx = (historyPosition + (int)k) % (int)rmsHistory.size();
-        const float x = plot.getX() + (float)k / (float)(rmsHistory.size()-1) * plot.getWidth();
-        const float normalized = juce::jlimit(0.f, 1.f, (rmsHistory[(size_t)idx] + 100.f) / 100.f);
-        const float y = plot.getBottom() - normalized * plot.getHeight();
-        if (k == 0) rmsPath.startNewSubPath(x, y); else rmsPath.lineTo(x, y);
-    }
-    g.setColour(juce::Colour(0xff68a7ff));
-    g.strokePath(rmsPath, juce::PathStrokeType(1.5f));
-
-    // Diagnostics are read-only. Never alter DSP state in the editor.
-    g.setColour(panel);
-    g.fillRoundedRectangle(juce::Rectangle<float>((float)margin, 200.f, (float)innerWidth, 65.f), 8.f);
-    const int columnWidth = (innerWidth - 30) / 3;
-    const auto drawDiagnostic = [&](int col, const juce::String& label,
-                                     const juce::String& value, juce::Colour valueColour) {
-        const int x = 32 + col * (columnWidth + 10);
-        g.setColour(faint);
-        g.setFont(juce::Font(juce::FontOptions(11.0f)));
-        g.drawText(label, x, 205, columnWidth, 17, juce::Justification::centredLeft);
-        g.setColour(valueColour);
-        g.setFont(juce::Font(juce::FontOptions(16.0f).withStyle("bold")));
-        g.drawText(value, x, 224, columnWidth, 22, juce::Justification::centredLeft);
+    const bool listening = listenView.getToggleState();
+    const juce::Colour background(0xff09141b), surface(0xff10232b), edge(0xff294b54);
+    const juce::Colour mint(0xff3de9c7), pale(0xffeff8f7), muted(0xff8ba9b5), amber(0xffffc36c);
+    g.fillAll(background);
+    juce::ColourGradient topGlow(juce::Colour(0xff163a40), 540.f, -80.f, background, 540.f, 270.f, false);
+    g.setGradientFill(topGlow);
+    g.fillRect(0, 0, getWidth(), 300);
+    const auto roundedPanel=[&](juce::Rectangle<float> r, float rad=11.f) {
+        g.setColour(surface);
+        g.fillRoundedRectangle(r, rad);
+        g.setColour(edge);
+        g.drawRoundedRectangle(r, rad, 1.f);
     };
-    drawDiagnostic(0, "DETECTOR / BLOCK RMS", juce::String(displayedRmsDb, 1) + " / "
-                   + juce::String(displayedBlockRmsDb, 1) + " dBFS", text);
-    drawDiagnostic(1, "REQUESTED RIDE", (displayedRequestedDb >= 0.f ? "+" : "")
-                   + juce::String(displayedRequestedDb, 1) + " dB", text);
-    const auto* boostParam = processor.apvts.getRawParameterValue("range");
-    const auto* cutParam = processor.apvts.getRawParameterValue("maxCut");
-    const float boost = boostParam != nullptr ? boostParam->load() : 6.f;
-    const float cut = cutParam != nullptr ? cutParam->load() : 3.f;
-    const juce::String status = !displayedActive ? "BELOW FLOOR"
-        : displayedRequestedDb >= boost-0.05f && boost>0.f ? "MAX BOOST"
-        : displayedRequestedDb <= -cut+0.05f && cut>0.f ? "MAX CUT" : "ACTIVE";
-    const bool adaptiveOn = processor.apvts.getRawParameterValue("adaptiveFloor")->load() >= 0.5f;
-    const juce::String detail = !adaptiveOn ? "MANUAL" : processor.getSilenceBlocked()
-        ? "SILENCE" : processor.getNoiseBlocked() ? "NOISE GUARD" : "ADAPTIVE";
-    drawDiagnostic(2, "RIDER STATUS / " + detail,
-        processor.getNoiseBlocked() ? "NOISE BLOCKED" : status,
-        displayedActive ? accent : faint);
-
-    // Both records refer to individual callbacks, not the latest Noise Guard toggle.
-    // 'T' means the same callback that changed Noise Guard; 'N' means other callback.
-    const auto eventLine = [](const juce::String& title, const smoothride::SpikeEvent& e) {
-        return title + " #" + juce::String(static_cast<juce::int64>(e.callbackId))
-            + " " + juce::String(e.block, 1) + "% "
-            + (e.guardToggle ? "T" : "N")
-            + "  P " + juce::String(e.params, 1)
-            + " I " + juce::String(e.input, 1)
-            + " AB " + juce::String(e.ab, 1)
-            + (e.abEngineRunning ? "*" : "")
-            + " R " + juce::String(e.rider, 1)
-            + " O " + juce::String(e.output, 1) + "%";
+    const auto title=[&](const juce::String& name, int x, int y, int width, juce::Colour colour=juce::Colour(0xffeff8f7)) {
+        g.setColour(colour);
+        g.setFont(juce::Font(juce::FontOptions(13.0f).withStyle("bold")));
+        g.drawText(name, x,y,width,20,juce::Justification::centredLeft);
     };
-    g.setColour(faint);
-    g.setFont(juce::Font(juce::FontOptions(9.0f)));
-    if (listenView.getToggleState()) {
-        // A compact status chip separates the loaded configuration from the
-        // dropdown selection. Never conflate selection with loading a preset.
-        const auto activePreset = processor.getActivePresetName();
-        const bool modified = processor.isActivePresetModified();
-        const juce::String state = activePreset.isEmpty() ? "CUSTOM" : modified ? "MODIFIED" : "SAVED";
-        const auto chipColour = modified ? juce::Colour(0xffffbb6a)
-            : activePreset.isEmpty() ? faint : accent;
-        g.setColour(chipColour.withAlpha(0.15f));
-        g.fillRoundedRectangle(juce::Rectangle<float>(31.f, 246.f, 91.f, 19.f), 5.f);
-        g.setColour(chipColour);
-        g.setFont(juce::Font(juce::FontOptions(10.f).withStyle("bold")));
-        g.drawText(state, 34, 247, 85, 17, juce::Justification::centred);
-        g.setColour(text);
-        g.setFont(juce::Font(juce::FontOptions(11.f)));
-        juce::String activeText = activePreset.isEmpty() ? "Unsaved custom settings"
-            : "ACTIVE: " + activePreset;
-        const auto selected = userPresetList.getText();
-        if (selected.isNotEmpty() && selected != activePreset)
-            activeText += "  |  Selected: " + selected + " (Load to apply)";
-        g.drawFittedText(activeText, 130, 246, 667, 20,
-                         juce::Justification::centredLeft, 1);
-    } else if (detailDSP.getToggleState()) {
-        g.drawText(eventLine("PEAK", displayedPeakEvent), 32, 247, 700, 11,
-                   juce::Justification::centredLeft);
-        g.drawText(eventLine("SPIKE", displayedSpikeEvent)
-                   + "   COUNTS T:" + juce::String(static_cast<juce::int64>(displayedToggleSpikes))
-                   + " N:" + juce::String(static_cast<juce::int64>(displayedNormalSpikes)),
-                   32, 257, 900, 11, juce::Justification::centredLeft);
-    } else {
-        g.drawText("LIGHTWEIGHT DSP MONITORING  |  Stage breakdown disabled  |  Noise Guard changes: "
-                   + juce::String(static_cast<juce::int64>(displayedGuardToggles)),
-                   32, 247, 900, 20, juce::Justification::centredLeft);
-    }
+    // Brand and application mode.
+    g.setColour(mint);
+    juce::Path logo;
+    logo.startNewSubPath(18.f,23.f); logo.lineTo(27.f,23.f); logo.lineTo(32.f,14.f);
+    logo.lineTo(40.f,36.f); logo.lineTo(48.f,9.f); logo.lineTo(56.f,23.f); logo.lineTo(71.f,23.f);
+    g.strokePath(logo, juce::PathStrokeType(2.5f));
+    g.setColour(pale);
+    g.setFont(juce::Font(juce::FontOptions(27.f).withStyle("bold")));
+    g.drawText("Smooth", 81, 6, 108, 39, juce::Justification::centredLeft);
+    g.setColour(mint);
+    g.drawText("Ride", 184, 6, 76, 39, juce::Justification::centredLeft);
+    g.setColour(muted);
+    g.setFont(juce::Font(juce::FontOptions(10.5f)));
+    g.drawText("INTELLIGENT GAIN RIDER", 270, 15, 222, 22, juce::Justification::centredLeft);
+    g.setColour(edge);
+    g.drawHorizontalLine(49, 14.f, 1067.f);
+    g.setColour(mint);
+    g.drawText("v0.9.0", 970, 14, 94, 23, juce::Justification::centredRight);
 
-    // Compact cards leave two rows for user presets and A/B snapshots.
-    constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 66;
-    const int cardW = (innerWidth - (cols-1)*cardGap) / cols;
-    for (int i=0; i<numControls; ++i) {
-        const int x = margin + (i%cols)*(cardW+cardGap);
-        const int y = cardY + (i/cols)*(cardH+cardGap);
-        g.setColour(panel);
-        g.fillRoundedRectangle((float)x, (float)y, (float)cardW, (float)cardH, 8.f);
+    // Tall meter wells, plus an expanded central monitoring surface.
+    roundedPanel({14.f,58.f,116.f,240.f});
+    roundedPanel({950.f,58.f,116.f,240.f});
+    drawMeter(g, {20.f,63.f,104.f,229.f},displayedInputDb,"INPUT PEAK");
+    drawMeter(g, {956.f,63.f,104.f,229.f},displayedOutputDb,"OUTPUT PEAK");
+    roundedPanel({140.f,58.f,800.f,240.f});
+    title(listening ? "GAIN RIDING  /  LIVE HISTORY" : "ADVANCED DSP  /  CALLBACK TELEMETRY",155,68,410,mint);
+    g.setColour(muted);
+    g.setFont(juce::Font(juce::FontOptions(11.f)));
+    g.drawText("AVG " + juce::String(displayedAverageLoad,2) + "%  |  PEAK "
+              + juce::String(displayedPeakLoad,2) + "%  |  60s "
+              + juce::String(displayedRollingPeak,2) + "%",585,68,338,20,juce::Justification::centredRight);
+
+    if (listening) {
+        const auto graph=juce::Rectangle<float>(164.f,104.f,751.f,116.f);
+        g.setColour(juce::Colour(0xff091a21));
+        g.fillRoundedRectangle(graph,5.f);
+        for (int i=0;i<=4;++i) {
+            float y=graph.getY()+graph.getHeight()*i/4.f;
+            g.setColour(juce::Colour(0xff27414c).withAlpha(0.62f));
+            g.drawHorizontalLine((int)y,graph.getX(),graph.getRight());
+        }
+        for (int i=0;i<=10;++i) {
+            float x=graph.getX()+graph.getWidth()*i/10.f;
+            g.setColour(juce::Colour(0xff27414c).withAlpha(0.30f));
+            g.drawVerticalLine((int)x,graph.getY(),graph.getBottom());
+        }
+        g.setColour(juce::Colour(0xff57727c));
+        g.drawHorizontalLine((int)graph.getCentreY(),graph.getX(),graph.getRight());
+        juce::Path ride, rms;
+        for (size_t i=0;i<gainHistory.size();++i) {
+            const size_t h=(size_t)((historyPosition+(int)i)%(int)gainHistory.size());
+            const float x=graph.getX()+(float)i/(float)(gainHistory.size()-1)*graph.getWidth();
+            const float yy=graph.getCentreY()-juce::jlimit(-12.f,12.f,gainHistory[h])/12.f*graph.getHeight()/2.f;
+            const float norm=juce::jlimit(0.f,1.f,(rmsHistory[h]+100.f)/100.f);
+            const float yr=graph.getBottom()-norm*graph.getHeight();
+            if (i==0) {ride.startNewSubPath(x,yy);rms.startNewSubPath(x,yr);}
+            else {ride.lineTo(x,yy);rms.lineTo(x,yr);}
+        }
+        g.setColour(mint);
+        g.strokePath(ride,juce::PathStrokeType(2.1f));
+        g.setColour(juce::Colour(0xff64aaff));
+        g.strokePath(rms,juce::PathStrokeType(1.35f));
+    } else {
+        const auto line=[&](const juce::String& t, int y, juce::Colour col=juce::Colour(0xff8ba9b5)) {
+            g.setColour(col); g.setFont(juce::Font(juce::FontOptions(11.f)));
+            g.drawFittedText(t,157,y,766,20,juce::Justification::centredLeft,1);
+        };
+        const auto event=[&](const juce::String& name,const smoothride::SpikeEvent& e) {
+            return name+"  #"+juce::String(static_cast<juce::int64>(e.callbackId))
+                  +"  BLOCK "+juce::String(e.block,2)+"%  P "+juce::String(e.params,1)
+                  +"  I "+juce::String(e.input,1)+"  AB "+juce::String(e.ab,1)
+                  +"  R "+juce::String(e.rider,1)+"  O "+juce::String(e.output,1)
+                  +"  "+(e.guardToggle?"TOGGLE":"NORMAL");
+        };
+        line("LAST "+juce::String(displayedCallbackUs,1)+" us   |   SPIKES "
+           +juce::String(static_cast<juce::int64>(displayedSpikes))
+           +"   |   GUARD CHANGES "+juce::String(static_cast<juce::int64>(displayedGuardToggles)),101,pale);
+        line(event("PEAK",displayedPeakEvent),128);
+        line(event("SPIKE",displayedSpikeEvent),153);
+        line("BASE PARAMS "+juce::String(displayedNormalParams,3)+"%  |  TOGGLE AVG/MAX "
+             +juce::String(displayedToggleParamsMean,2)+" / "
+             +juce::String(displayedToggleParamsMax,2)+"%  |  RESET "
+             +juce::String(displayedResetUs,1)+" us",179);
+        line("THRESHOLD SPIKES: TOGGLE "
+             +juce::String(static_cast<juce::int64>(displayedToggleSpikes))
+             +"   NORMAL "+juce::String(static_cast<juce::int64>(displayedNormalSpikes))
+             +"  |  DETAIL DSP " + (detailDSP.getToggleState()?"ON":"OFF"),205,mint);
     }
+    // Three foreground values below the live chart or diagnostic grid.
+    g.setColour(juce::Colour(0xff213c45));
+    g.drawHorizontalLine(235,160.f,923.f);
+    const auto statistic=[&](const juce::String& name, const juce::String& value, int x, int w,juce::Colour color) {
+        g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(10.f)));
+        g.drawText(name,x,240,w,17,juce::Justification::centred);
+        g.setColour(color);g.setFont(juce::Font(juce::FontOptions(19.f).withStyle("bold")));
+        g.drawText(value,x,257,w,31,juce::Justification::centred);
+    };
+    statistic("DETECTOR RMS",juce::String(displayedRmsDb,1)+" dBFS",155,228,pale);
+    statistic("GAIN RIDE",(displayedRideDb>=0?"+":"")+juce::String(displayedRideDb,1)+" dB",388,228,mint);
+    const float boost=processor.apvts.getRawParameterValue("range")->load();
+    const float cut=processor.apvts.getRawParameterValue("maxCut")->load();
+    const juce::String status=!displayedActive?"BELOW FLOOR":displayedRequestedDb>=boost-0.05f?"MAX BOOST":displayedRequestedDb<=-cut+0.05f?"MAX CUT":"ACTIVE";
+    statistic("RIDER STATUS",processor.getNoiseBlocked()?"NOISE BLOCKED":status,625,300,displayedActive?mint:muted);
+
+    // Four functional control groups replace the old uniform parameter grid.
+    struct Group {int x,w;const char* name;};
+    const Group groups[]={{14,250,"LEVELING"},{272,250,"RESPONSE"},{530,318,"DETECTION"},{856,210,"OUTPUT"}};
+    for (const auto& group:groups) {
+        roundedPanel({(float)group.x,306.f,(float)group.w,166.f},10.f);
+        title(group.name,group.x+13,313,group.w-20,mint);
+        g.setColour(juce::Colour(0xff2d5058));
+        g.drawHorizontalLine(337,(float)group.x+8,(float)group.x+group.w-8);
+    }
+    const auto activePreset=processor.getActivePresetName();
+    const bool modified=processor.isActivePresetModified();
+    const juce::Colour stateColour=modified?amber:activePreset.isEmpty()?muted:mint;
+    g.setColour(juce::Colour(0xff0f252d));
+    g.fillRoundedRectangle(juce::Rectangle<float>(14.f,480.f,1052.f,112.f),10.f);
+    g.setColour(edge);
+    g.drawRoundedRectangle(juce::Rectangle<float>(14.f,480.f,1052.f,112.f),10.f,1.f);
+    g.setFont(juce::Font(juce::FontOptions(10.f).withStyle("bold")));
+    g.setColour(muted);
+    g.drawText("FACTORY",22,487,87,19,juce::Justification::centredLeft);
+    g.setColour(stateColour);
+    const juce::String state=modified?"MODIFIED":activePreset.isEmpty()?"CUSTOM":"SAVED";
+    g.drawText(state,388,487,82,19,juce::Justification::centredLeft);
+    g.setColour(pale);
+    g.setFont(juce::Font(juce::FontOptions(11.f)));
+    g.drawFittedText(activePreset.isEmpty()?"No active preset":"ACTIVE: "+activePreset,
+                     477,487,421,20,juce::Justification::centredLeft,1);
+
 }
 
 void SmoothRideAudioProcessorEditor::resized() {
-    constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 66;
-    const int cardW = (getWidth()-36-(cols-1)*cardGap)/cols;
-    for (int i=0; i<numControls; ++i) {
-        const int x = 18+(i%cols)*(cardW+cardGap);
-        const int y = cardY+(i/cols)*(cardH+cardGap);
-        labels[(size_t)i]->setBounds(x+6, y+1, cardW-12, 14);
-        sliders[(size_t)i]->setBounds(x+8, y+14, cardW-16, cardH-15);
+    struct Slot {int i,x,w;};
+    const Slot slots[]={{0,23,75},{2,105,75},{3,187,75},
+                        {4,279,75},{5,361,75},{6,443,75},
+                        {1,537,70},{9,610,70},{10,683,70},{11,756,83},
+                        {7,863,94},{8,963,94}};
+    for (const auto& item:slots) {
+        labels[(size_t)item.i]->setBounds(item.x,427,item.w,19);
+        sliders[(size_t)item.i]->setBounds(item.x,346,item.w,82);
     }
-    presetLabel.setBounds(22, 494, 155, 23);
-    presets.setBounds(178, 493, 300, 25);
-    presetName.setBounds(489, 493, 244, 25);
-    savePreset.setBounds(739, 493, 71, 25);
-    updatePreset.setBounds(815, 493, 80, 25);
-    revertPreset.setBounds(901, 493, 80, 25);
-    notice.setBounds(816, 241, 240, 25);
-    userPresetList.setBounds(20, 525, 270, 26);
-    loadPreset.setBounds(298, 525, 77, 26);
-    deletePreset.setBounds(380, 525, 77, 26);
-    captureA.setBounds(485, 525, 85, 26);
-    captureB.setBounds(575, 525, 85, 26);
-    recallA.setBounds(672, 525, 85, 26);
-    recallB.setBounds(762, 525, 85, 26);
-    detailDSP.setBounds(674, 13, 112, 26);
-    listenView.setBounds(790, 13, 124, 26);
-    resetDSP.setBounds(860, 525, 90, 26);
-    spikeThreshold.setBounds(956, 525, 100, 26);
-    noiseGuard.setBounds(660, 120, 195, 22);
-    matchAB.setBounds(20, 559, 128, 25);
-    calibrateA.setBounds(160, 557, 80, 27);
-    calibrateB.setBounds(248, 557, 80, 27);
-    comparisonInfo.setBounds(347, 556, 420, 28);
-    importPreset.setBounds(784, 557, 125, 27);
-    exportPreset.setBounds(918, 557, 125, 27);
+    // Detection safety controls live in their own reserved footer, not over a knob.
+    noiseGuard.setBounds(585,447,205,23);
+    presetLabel.setBounds(19,483,93,27);
+    presets.setBounds(112,483,269,27);
+    listenView.setBounds(921,483,137,26);
+    userPresetList.setBounds(21,518,205,26);
+    presetName.setBounds(233,518,205,26);
+    savePreset.setBounds(444,518,65,26);
+    loadPreset.setBounds(514,518,61,26);
+    updatePreset.setBounds(580,518,75,26);
+    revertPreset.setBounds(661,518,75,26);
+    deletePreset.setBounds(741,518,65,26);
+    importPreset.setBounds(813,518,78,26);
+    exportPreset.setBounds(898,518,78,26);
+    // Quick A/B workflow remains accessible in both presentation modes.
+    captureA.setBounds(21,554,75,27);
+    captureB.setBounds(101,554,75,27);
+    recallA.setBounds(181,554,75,27);
+    recallB.setBounds(261,554,75,27);
+    matchAB.setBounds(350,554,116,27);
+    calibrateA.setBounds(475,554,66,27);
+    calibrateB.setBounds(546,554,66,27);
+    comparisonInfo.setBounds(618,552,443,31);
+    notice.setBounds(618,552,442,31);
+    detailDSP.setBounds(614,551,105,29);
+    resetDSP.setBounds(724,554,91,27);
+    spikeThreshold.setBounds(821,554,90,27);
 }

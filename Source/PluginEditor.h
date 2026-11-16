@@ -4,6 +4,17 @@
 #include <array>
 #include <memory>
 
+// UI-only skin: no DSP allocations or processing are added to the audio callback.
+class SmoothRideSkin final : public juce::LookAndFeel_V4 {
+public:
+    SmoothRideSkin();
+    void drawRotarySlider(juce::Graphics&, int x, int y, int width, int height,
+                          float sliderPosProportional, float rotaryStartAngle,
+                          float rotaryEndAngle, juce::Slider&) override;
+    void drawButtonBackground(juce::Graphics&, juce::Button&, const juce::Colour&,
+                              bool highlighted, bool down) override;
+};
+
 class SmoothRideAudioProcessorEditor final : public juce::AudioProcessorEditor,
                                              private juce::Timer {
 public:
@@ -21,6 +32,7 @@ private:
     void updateView();
 
     SmoothRideAudioProcessor& processor;
+    SmoothRideSkin skin;
     static constexpr int numControls = 12;
     std::array<juce::String, numControls> ids {{ "target", "floor", "range", "maxCut", "speed",
                                                    "downSpeed", "mix", "output", "ceiling", "gateHyst", "lowProtect", "adaptiveFloor" }};
