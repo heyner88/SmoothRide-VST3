@@ -1,3 +1,7 @@
+# SmoothRide v0.9.2
+
+See [release notes](README-v0.9.2.md) for visual changes and testing.
+
 # SmoothRide v0.9.1 — Modern Interface Preview
 
 See [README-v0.9.1.md](README-v0.9.1.md) for the change log and testing instructions.

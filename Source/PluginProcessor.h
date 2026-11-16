@@ -64,6 +64,13 @@ public:
     float getInputBlockRms() const noexcept { return inputBlockRms.load(std::memory_order_relaxed); }
     float getInputPeak() const noexcept { return inputPeak.load(std::memory_order_relaxed); }
     float getOutputPeak() const noexcept { return outputPeak.load(std::memory_order_relaxed); }
+    // Independent channel measurements, used only by the new L/R meter UI.
+    float getInputChannelPeak(int channel) const noexcept {
+        return inputChannelPeak[channel == 1 ? 1 : 0].load(std::memory_order_relaxed);
+    }
+    float getOutputChannelPeak(int channel) const noexcept {
+        return outputChannelPeak[channel == 1 ? 1 : 0].load(std::memory_order_relaxed);
+    }
     float getRideDb() const noexcept { return rideDb.load(std::memory_order_relaxed); }
     float getLimiterReductionDb() const noexcept { return limiterReductionDb.load(std::memory_order_relaxed); }
     float getDetectedRmsDb() const noexcept { return detectedRmsDb.load(std::memory_order_relaxed); }
@@ -115,6 +122,7 @@ private:
     bool lastGuardState = false, guardStateInitialized = false;
 
     std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f}, inputBlockRms {0.0f};
+    std::array<std::atomic<float>, 2> inputChannelPeak {}, outputChannelPeak {};
     std::atomic<float> rideDb {0.0f}, limiterReductionDb {0.0f};
     std::atomic<float> detectedRmsDb {-160.0f}, requestedRideDb {0.0f}, effectiveFloorDb {-60.0f};
     std::atomic<bool> riderActive {false}, silenceBlocked {false}, noiseBlocked {false};

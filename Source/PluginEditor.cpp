@@ -40,6 +40,9 @@ void SmoothRideSkin::drawRotarySlider(juce::Graphics& g,int x,int y,int w,int h,
                               juce::Colour(0xff0d222b),center.x+inner,center.y+inner,false);
     g.setGradientFill(grad);
     g.fillEllipse(center.x-inner,center.y-inner,inner*2.f,inner*2.f);
+    g.setColour(juce::Colours::white.withAlpha(0.11f));
+    g.drawArc(center.x-inner+2.f, center.y-inner+2.f,2.f*inner-4.f,2.f*inner-4.f,
+              juce::MathConstants<float>::pi*1.20f,juce::MathConstants<float>::pi*1.88f,1.25f);
     const auto pointer=juce::Point<float>(std::sin(a),-std::cos(a));
     g.setColour(juce::Colours::white.withAlpha(0.9f));
     g.drawLine(center.x+pointer.x*inner*0.30f,center.y+pointer.y*inner*0.30f,
@@ -71,7 +74,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         slider.setColour(juce::Slider::thumbColourId, text);
         slider.setColour(juce::Slider::textBoxTextColourId, text);
         slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-        slider.setColour(juce::Slider::textBoxBackgroundColourId, panel);
+        slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff102730));
         if (ids[i] == "speed" || ids[i] == "downSpeed") slider.setTextValueSuffix(" ms");
         else if (ids[i] == "lowProtect" || ids[i] == "adaptiveFloor") slider.setTextValueSuffix("");
         else if (ids[i] == "mix") slider.setTextValueSuffix(" %");
@@ -81,7 +84,7 @@ SmoothRideAudioProcessorEditor::SmoothRideAudioProcessorEditor(SmoothRideAudioPr
         labels[i]->setText(names[i], juce::dontSendNotification);
         labels[i]->setJustificationType(juce::Justification::centred);
         labels[i]->setColour(juce::Label::textColourId, faint);
-        labels[i]->setFont(juce::Font(juce::FontOptions(10.0f).withStyle("bold")));
+        labels[i]->setFont(juce::Font(juce::FontOptions(11.0f).withStyle("bold")));
         addAndMakeVisible(*labels[i]);
         attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, ids[i], slider);
     }
@@ -317,8 +320,14 @@ void SmoothRideAudioProcessorEditor::updateView() {
     detailDSP.setVisible(advanced);
     resetDSP.setVisible(advanced);
     spikeThreshold.setVisible(advanced);
+    // Listening mode keeps the actions used most frequently. Advanced mode
+    // retains every existing action, including portable preset operations.
+    for (auto* button : { &deletePreset, &importPreset, &exportPreset,
+                          &captureA, &captureB, &calibrateA, &calibrateB })
+        button->setVisible(advanced);
     notice.setVisible(!advanced);
     comparisonInfo.setVisible(false);
+    resized();
     // Only controls visibility. Existing parameter values and DSP telemetry remain untouched.
     repaint();
 }
@@ -332,6 +341,10 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     revertPreset.setEnabled(modified);
     displayedInputDb = ampDb(processor.getInputPeak());
     displayedOutputDb = ampDb(processor.getOutputPeak());
+    displayedInputLDb = ampDb(processor.getInputChannelPeak(0));
+    displayedInputRDb = ampDb(processor.getInputChannelPeak(1));
+    displayedOutputLDb = ampDb(processor.getOutputChannelPeak(0));
+    displayedOutputRDb = ampDb(processor.getOutputChannelPeak(1));
     displayedRideDb = processor.getRideDb();
     displayedPeakReductionDb = processor.getLimiterReductionDb();
     displayedRmsDb = processor.getDetectedRmsDb();
@@ -411,38 +424,47 @@ void SmoothRideAudioProcessorEditor::applyPreset(int presetId) {
 }
 
 void SmoothRideAudioProcessorEditor::drawMeter(juce::Graphics& g, juce::Rectangle<float> r,
-                                               float levelDb, const juce::String& caption) const {
+                                               float leftDb, float rightDb, const juce::String& caption) const {
     const auto muted = juce::Colour(0xff8ba9b5);
     const auto mint = juce::Colour(0xff3de9c7);
+    const auto amber = juce::Colour(0xffffc36c);
     g.setColour(muted);
-    g.setFont(juce::Font(juce::FontOptions(11.0f).withStyle("bold")));
-    g.drawText(caption, r.removeFromTop(24).toNearestInt(), juce::Justification::centred);
-    const float valueY = r.getBottom() - 24.0f;
-    const auto track = juce::Rectangle<float>(r.getCentreX()-16.f, r.getY()+8.f, 32.f, valueY-r.getY()-14.f);
-    g.setColour(juce::Colour(0xff070f15));
-    g.fillRoundedRectangle(track, 5.f);
-    const float fraction = juce::jlimit(0.0f, 1.0f, (levelDb+60.0f)/60.0f);
-    auto fill = track.reduced(3.0f);
-    const float fillBottom = fill.getBottom();
-    const float fillHeight = fill.getHeight() * fraction;
-    fill.setY(fillBottom - fillHeight);
-    fill.setHeight(fillHeight);
-    juce::ColourGradient gradient(mint, fill.getCentreX(), track.getBottom(),
-                                  juce::Colour(0xffffcc70), fill.getCentreX(), track.getY(), false);
-    g.setGradientFill(gradient);
-    if (fill.getHeight() > 0.5f) g.fillRoundedRectangle(fill, 3.f);
-    g.setColour(juce::Colour(0xff38545c));
-    g.drawRoundedRectangle(track, 5.f, 1.f);
-    g.setFont(juce::Font(juce::FontOptions(10.0f)));
+    g.setFont(juce::Font(juce::FontOptions(10.5f).withStyle("bold")));
+    g.drawText(caption, r.removeFromTop(22).toNearestInt(), juce::Justification::centred);
+    const float top = r.getY() + 11.f, bottom = r.getBottom() - 38.f;
+    const float trackH = bottom - top;
+    const float trackWidth = 23.f;
+    const float xL = r.getCentreX() - 28.f, xR = r.getCentreX() + 5.f;
+    for (int channel = 0; channel < 2; ++channel) {
+        const float x = channel == 0 ? xL : xR;
+        const float db = channel == 0 ? leftDb : rightDb;
+        const auto track = juce::Rectangle<float>(x, top, trackWidth, trackH);
+        g.setColour(juce::Colour(0xff061218));
+        g.fillRoundedRectangle(track, 4.f);
+        const float fraction = juce::jlimit(0.f, 1.f, (db + 60.f)/60.f);
+        auto fill = track.reduced(3.f);
+        fill.setY(fill.getBottom() - fill.getHeight()*fraction);
+        fill.setHeight((trackH-6.f)*fraction);
+        juce::ColourGradient gradient(amber, x+11.f, top, mint, x+11.f, bottom, false);
+        g.setGradientFill(gradient);
+        if (fill.getHeight() > .5f) g.fillRoundedRectangle(fill, 2.f);
+        g.setColour(juce::Colour(0xff41606b));
+        g.drawRoundedRectangle(track, 4.f, 1.f);
+        g.setColour(muted);
+        g.setFont(juce::Font(juce::FontOptions(10.f)));
+        g.drawText(channel == 0 ? "L" : "R", (int)x-1, (int)bottom+4, (int)trackWidth+2, 14,
+                   juce::Justification::centred);
+    }
     g.setColour(muted);
+    g.setFont(juce::Font(juce::FontOptions(9.f)));
     for (int db=0; db>=-60; db-=12) {
-        float y=track.getY()+(float)(-db)/60.f*track.getHeight();
-        g.drawText(juce::String(db), (int)r.getX()+2, (int)y-7, 27, 14, juce::Justification::centredRight);
+        const float y = top + (float)(-db)/60.f*trackH;
+        g.drawText(juce::String(db), (int)r.getX()-1, (int)y-7, 24, 14, juce::Justification::centredRight);
     }
     g.setColour(juce::Colour(0xffeaf7f5));
-    g.setFont(juce::Font(juce::FontOptions(12.0f).withStyle("bold")));
-    g.drawText(juce::String(levelDb, 1) + " dBFS", (int)r.getX(), (int)valueY, (int)r.getWidth(), 21,
-               juce::Justification::centred);
+    g.setFont(juce::Font(juce::FontOptions(11.f).withStyle("bold")));
+    g.drawText(juce::String(juce::jmax(leftDb, rightDb), 1) + " dBFS",
+               (int)r.getX(), (int)bottom+21, (int)r.getWidth(), 17, juce::Justification::centred);
 }
 
 void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
@@ -481,13 +503,13 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(edge);
     g.drawHorizontalLine(49, 14.f, 1067.f);
     g.setColour(mint);
-    g.drawText("v0.9.1", 970, 14, 94, 23, juce::Justification::centredRight);
+    g.drawText("v0.9.2", 970, 14, 94, 23, juce::Justification::centredRight);
 
     // Tall meter wells, plus an expanded central monitoring surface.
     roundedPanel({14.f,58.f,116.f,240.f});
     roundedPanel({950.f,58.f,116.f,240.f});
-    drawMeter(g, {20.f,63.f,104.f,229.f},displayedInputDb,"INPUT PEAK");
-    drawMeter(g, {956.f,63.f,104.f,229.f},displayedOutputDb,"OUTPUT PEAK");
+    drawMeter(g, {20.f,63.f,104.f,229.f},displayedInputLDb,displayedInputRDb,"INPUT PEAK");
+    drawMeter(g, {956.f,63.f,104.f,229.f},displayedOutputLDb,displayedOutputRDb,"OUTPUT PEAK");
     roundedPanel({140.f,58.f,800.f,240.f});
     title(listening ? "GAIN RIDING  /  LIVE HISTORY" : "ADVANCED DSP  /  CALLBACK TELEMETRY",155,68,410,mint);
     g.setColour(muted);
@@ -612,29 +634,42 @@ void SmoothRideAudioProcessorEditor::resized() {
     softFloorSwitch.setBounds(685,350,150,32);
     adaptiveFloorSwitch.setBounds(685,390,150,32);
     noiseGuard.setBounds(566,445,265,24);
+    const bool listening = listenView.getToggleState();
     presetLabel.setBounds(23,483,76,27);
     presets.setBounds(104,483,278,27);
     listenView.setBounds(921,483,137,26);
-    userPresetList.setBounds(21,518,205,26);
-    presetName.setBounds(233,518,205,26);
-    savePreset.setBounds(444,518,65,26);
-    loadPreset.setBounds(514,518,61,26);
-    updatePreset.setBounds(580,518,75,26);
-    revertPreset.setBounds(661,518,75,26);
-    deletePreset.setBounds(741,518,65,26);
-    importPreset.setBounds(813,518,78,26);
-    exportPreset.setBounds(898,518,78,26);
-    // Quick A/B workflow remains accessible in both presentation modes.
-    captureA.setBounds(21,554,75,27);
-    captureB.setBounds(101,554,75,27);
-    recallA.setBounds(181,554,75,27);
-    recallB.setBounds(261,554,75,27);
-    matchAB.setBounds(350,554,116,27);
-    calibrateA.setBounds(475,554,66,27);
-    calibrateB.setBounds(546,554,66,27);
-    comparisonInfo.setBounds(618,552,443,31);
-    notice.setBounds(618,552,442,31);
-    detailDSP.setBounds(614,551,105,29);
-    resetDSP.setBounds(724,554,91,27);
-    spikeThreshold.setBounds(821,554,90,27);
+    if (listening) {
+        userPresetList.setBounds(22,519,260,28);
+        presetName.setBounds(290,519,248,28);
+        savePreset.setBounds(545,519,72,28);
+        loadPreset.setBounds(625,519,72,28);
+        updatePreset.setBounds(705,519,80,28);
+        revertPreset.setBounds(793,519,80,28);
+        recallA.setBounds(22,556,87,27);
+        recallB.setBounds(117,556,87,27);
+        matchAB.setBounds(218,555,125,28);
+        notice.setBounds(354,555,690,28);
+    } else {
+        userPresetList.setBounds(21,518,205,26);
+        presetName.setBounds(233,518,205,26);
+        savePreset.setBounds(444,518,65,26);
+        loadPreset.setBounds(514,518,61,26);
+        updatePreset.setBounds(580,518,75,26);
+        revertPreset.setBounds(661,518,75,26);
+        deletePreset.setBounds(741,518,65,26);
+        importPreset.setBounds(813,518,78,26);
+        exportPreset.setBounds(898,518,78,26);
+        captureA.setBounds(21,554,75,27);
+        captureB.setBounds(101,554,75,27);
+        recallA.setBounds(181,554,75,27);
+        recallB.setBounds(261,554,75,27);
+        matchAB.setBounds(350,554,116,27);
+        calibrateA.setBounds(475,554,66,27);
+        calibrateB.setBounds(546,554,66,27);
+        comparisonInfo.setBounds(618,552,443,31);
+        notice.setBounds(618,552,442,31);
+        detailDSP.setBounds(614,551,105,29);
+        resetDSP.setBounds(724,554,91,27);
+        spikeThreshold.setBounds(821,554,90,27);
+    }
 }

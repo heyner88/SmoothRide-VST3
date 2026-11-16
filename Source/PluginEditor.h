@@ -24,7 +24,7 @@ public:
     void resized() override;
 private:
     void timerCallback() override;
-    void drawMeter(juce::Graphics&, juce::Rectangle<float>, float levelDb,
+    void drawMeter(juce::Graphics&, juce::Rectangle<float>, float leftDb, float rightDb,
                    const juce::String& caption) const;
     void applyPreset(int preset);
     void refreshUserPresetList();
@@ -69,6 +69,8 @@ private:
     std::array<float, 240> rmsHistory {};
     int historyPosition = 0;
     float displayedInputDb = -90.0f, displayedOutputDb = -90.0f;
+    float displayedInputLDb = -90.0f, displayedInputRDb = -90.0f;
+    float displayedOutputLDb = -90.0f, displayedOutputRDb = -90.0f;
     float displayedRideDb = 0.0f, displayedPeakReductionDb = 0.0f;
     float displayedRmsDb = -160.0f, displayedRequestedDb = 0.0f;
     bool displayedActive = false;

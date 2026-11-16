@@ -112,9 +112,12 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     const bool detailedTiming = detailedDSPDiagnostics.load(std::memory_order_relaxed);
     const auto parametersEnd = detailedTiming ? std::chrono::steady_clock::now() : callbackStart;
     float inPeak = 0.0f;
+    float channelIn[2] = {0.0f, 0.0f};
     double inputPower = 0.0;
     for (int c = 0; c < channels; ++c) {
-        inPeak = juce::jmax(inPeak, buffer.getMagnitude(c, 0, buffer.getNumSamples()));
+        const float magnitude = buffer.getMagnitude(c, 0, buffer.getNumSamples());
+        if (c < 2) channelIn[c] = magnitude;
+        inPeak = juce::jmax(inPeak, magnitude);
         const float* samples = buffer.getReadPointer(c);
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
             const double x = std::isfinite(samples[i]) ? samples[i] : 0.0;
@@ -181,8 +184,17 @@ void SmoothRideAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     recentOutputRmsDb.store((float)(10.0*std::log10(std::max(1.e-16,recentPower))),
                              std::memory_order_relaxed);
     float outPeak = 0.0f;
-    for (int c = 0; c < channels; ++c)
-        outPeak = juce::jmax(outPeak, buffer.getMagnitude(c, 0, buffer.getNumSamples()));
+    float channelOut[2] = {0.0f, 0.0f};
+    for (int c = 0; c < channels; ++c) {
+        const float magnitude = buffer.getMagnitude(c, 0, buffer.getNumSamples());
+        if (c < 2) channelOut[c] = magnitude;
+        outPeak = juce::jmax(outPeak, magnitude);
+    }
+    // Mono inputs show L only; R stays at silence rather than duplicating L.
+    for (int c = 0; c < 2; ++c) {
+        inputChannelPeak[c].store(channelIn[c], std::memory_order_relaxed);
+        outputChannelPeak[c].store(channelOut[c], std::memory_order_relaxed);
+    }
     inputPeak.store(inPeak, std::memory_order_relaxed);
     inputBlockRms.store(blockRms, std::memory_order_relaxed);
     outputPeak.store(outPeak, std::memory_order_relaxed);
