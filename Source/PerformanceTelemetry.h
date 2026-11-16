@@ -9,12 +9,20 @@
 namespace smoothride {
 // Audio-thread owned metrics. The GUI reads only atomic snapshots published by the processor.
 // All percentages represent elapsed callback wall time / audio-block duration (NOT system CPU).
+// Captured from ONE audio callback. Percentages use that callback's own deadline.
+struct SpikeEvent {
+    float block = 0.f, params = 0.f, input = 0.f, ab = 0.f, rider = 0.f, output = 0.f;
+    bool guardToggle = false, abEngineRunning = false;
+};
+
 class PerformanceTelemetry {
 public:
     void reset() noexcept {
         averageLoad = maxLoad = lastMicroseconds = rollingMaxLoad = 0.0;
         spikeCount = 0; lastSpikePercent = lastSpikeMicroseconds = lastSpikeBudgetMicroseconds = 0.0;
         initialized = false; lastRollingSecond = -1;
+        peakEvent = {}; lastSpikeEvent = {};
+        toggleSpikes = normalSpikes = 0;
         toggleCount = 0; lastToggleLoad = lastToggleRiderLoad = 0.0;
         lastTogglePreLoad = lastTogglePostLoad = 0.0; lastMonitorUs = 0.0;
         lastToggleParamsLoad = lastToggleInputLoad = lastToggleABLoad = 0.0;
@@ -48,7 +56,18 @@ public:
             ? monitorSeconds * 1.0e6 : 0.0;
         if (!initialized) { averageLoad = load; initialized = true; }
         else averageLoad += 0.08 * (load - averageLoad);
-        maxLoad = std::max(maxLoad, load);
+        // Capture all stage timings from exactly the same callback that established PEAK.
+        // Reset/monitor overhead are intentionally excluded from these measurements.
+        const auto stagePct = [deadline](double seconds) noexcept -> float {
+            return std::isfinite(seconds) && seconds >= 0.0
+                ? static_cast<float>(seconds / deadline * 100.0) : 0.f;
+        };
+        const SpikeEvent event {
+            stagePct(elapsedSeconds), stagePct(parametersSeconds),
+            stagePct(inputAnalysisSeconds), stagePct(abPreparationSeconds),
+            stagePct(riderSeconds), stagePct(postSeconds), guardToggled, abEngineRan
+        };
+        if (load > maxLoad) { maxLoad = load; peakEvent = event; }
         if (!guardToggled) {
             const double params = std::max(0.0, parametersSeconds / deadline * 100.0);
             if (!normalParamsInitialized) { normalParamsLoad = params; normalParamsInitialized = true; }
@@ -79,6 +98,8 @@ public:
         if (std::isfinite(spikeThresholdPercent) && spikeThresholdPercent > 0.0
                 && load * 100.0 >= spikeThresholdPercent) {
             ++spikeCount;
+            if (guardToggled) ++toggleSpikes; else ++normalSpikes;
+            lastSpikeEvent = event;
             lastSpikePercent = load * 100.0;
             lastSpikeMicroseconds = elapsedSeconds * 1.0e6;
             lastSpikeBudgetMicroseconds = deadline * 1.0e6;
@@ -106,6 +127,10 @@ public:
         const auto second = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
         record(elapsedSeconds, sampleCount, sampleRate, second);
     }
+    SpikeEvent capturedPeak() const noexcept { return peakEvent; }
+    SpikeEvent capturedLastSpike() const noexcept { return lastSpikeEvent; }
+    std::uint64_t toggleSpikeCount() const noexcept { return toggleSpikes; }
+    std::uint64_t normalSpikeCount() const noexcept { return normalSpikes; }
     std::uint64_t guardToggles() const noexcept { return toggleCount; }
     float lastTogglePercent() const noexcept { return static_cast<float>(lastToggleLoad); }
     float lastToggleRiderPercent() const noexcept { return static_cast<float>(lastToggleRiderLoad); }
@@ -134,6 +159,8 @@ private:
     std::array<Bucket, 60> seconds {};
     double averageLoad = 0.0, maxLoad = 0.0, rollingMaxLoad = 0.0, lastMicroseconds = 0.0;
     std::uint64_t spikeCount = 0, toggleCount = 0;
+    std::uint64_t toggleSpikes = 0, normalSpikes = 0;
+    SpikeEvent peakEvent {}, lastSpikeEvent {};
     double lastToggleLoad = 0.0, lastToggleRiderLoad = 0.0;
     double lastTogglePreLoad = 0.0, lastTogglePostLoad = 0.0, lastMonitorUs = 0.0;
     double lastToggleParamsLoad = 0.0, lastToggleInputLoad = 0.0, lastToggleABLoad = 0.0;
@@ -151,6 +178,8 @@ namespace smoothride {
 // Published statistics contain atomic fields, so concurrent GUI reads have no data races.
 // The sequence number brackets the writer's updates; the GUI retries if it overlaps one.
 struct DSPSnapshot {
+    SpikeEvent historicalPeakEvent {}, lastSpikeEvent {};
+    std::uint64_t toggleSpikes = 0, normalSpikes = 0;
     float average = 0, peak = 0, rollingPeak = 0, callbackUs = 0;
     float lastSpikePercent = 0, lastSpikeUs = 0, lastSpikeBudgetUs = 0;
     std::uint64_t spikes = 0, guardToggles = 0;
@@ -188,6 +217,10 @@ public:
         resetUs.store(t.resetMicroseconds(), std::memory_order_seq_cst);
         abRunning.store(t.wasABEngineRunning(), std::memory_order_seq_cst);
         monitorUs.store(t.lastMonitorMicroseconds(), std::memory_order_seq_cst);
+        publishEvent(t.capturedPeak(), peakStages);
+        publishEvent(t.capturedLastSpike(), lastSpikeStages);
+        toggleSpikeCount.store(t.toggleSpikeCount(), std::memory_order_seq_cst);
+        normalSpikeCount.store(t.normalSpikeCount(), std::memory_order_seq_cst);
         version.fetch_add(1, std::memory_order_seq_cst); // even: complete
     }
     DSPSnapshot read() const noexcept {
@@ -219,6 +252,10 @@ public:
             result.toggleParamsMaxPercent = maxParams.load(std::memory_order_seq_cst);
             result.resetMicroseconds = resetUs.load(std::memory_order_seq_cst);
             result.lastToggleABRunning = abRunning.load(std::memory_order_seq_cst);
+            result.historicalPeakEvent = readEvent(peakStages);
+            result.lastSpikeEvent = readEvent(lastSpikeStages);
+            result.toggleSpikes = toggleSpikeCount.load(std::memory_order_seq_cst);
+            result.normalSpikes = normalSpikeCount.load(std::memory_order_seq_cst);
             if (version.load(std::memory_order_seq_cst) == before) return result;
         }
         // During a rare busy interval, avoid showing an internally inconsistent frame.
@@ -227,6 +264,33 @@ public:
     // Called by the message thread after a successful read, not the audio thread.
     void remember(const DSPSnapshot& s) const noexcept { lastGood = s; }
 private:
+    // Lock-free atomics and no allocations on the audio thread.
+    struct AtomicEvent {
+        std::atomic<float> block {0}, params {0}, input {0}, ab {0}, rider {0}, output {0};
+        std::atomic<bool> guardToggle {false}, abEngineRunning {false};
+    };
+    static void publishEvent(const SpikeEvent& e, AtomicEvent& out) noexcept {
+        out.block.store(e.block, std::memory_order_seq_cst);
+        out.params.store(e.params, std::memory_order_seq_cst);
+        out.input.store(e.input, std::memory_order_seq_cst);
+        out.ab.store(e.ab, std::memory_order_seq_cst);
+        out.rider.store(e.rider, std::memory_order_seq_cst);
+        out.output.store(e.output, std::memory_order_seq_cst);
+        out.guardToggle.store(e.guardToggle, std::memory_order_seq_cst);
+        out.abEngineRunning.store(e.abEngineRunning, std::memory_order_seq_cst);
+    }
+    static SpikeEvent readEvent(const AtomicEvent& in) noexcept {
+        return {in.block.load(std::memory_order_seq_cst),
+                in.params.load(std::memory_order_seq_cst),
+                in.input.load(std::memory_order_seq_cst),
+                in.ab.load(std::memory_order_seq_cst),
+                in.rider.load(std::memory_order_seq_cst),
+                in.output.load(std::memory_order_seq_cst),
+                in.guardToggle.load(std::memory_order_seq_cst),
+                in.abEngineRunning.load(std::memory_order_seq_cst)};
+    }
+    AtomicEvent peakStages {}, lastSpikeStages {};
+    std::atomic<std::uint64_t> toggleSpikeCount {0}, normalSpikeCount {0};
     std::atomic<unsigned int> version {0};
     std::atomic<float> avg {0}, peak {0}, rolling {0}, callback {0};
     std::atomic<float> spikeLoad {0}, spikeDuration {0}, spikeBudget {0};

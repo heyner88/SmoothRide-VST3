@@ -2,7 +2,41 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+static void testSpikeEventSnapshots() {
+    smoothride::PerformanceTelemetry t;
+    smoothride::PublishedDSPTelemetry published;
+    // 10ms budget: event A is peak and a toggle spike.
+    t.record(.003, 480, 48000, 100, 10., true,
+             .0006, .0018, .0006, 0., .0012, .0003, .0003, false);
+    published.publish(t);
+    auto first = published.read();
+    assert(first.spikes == 1 && first.toggleSpikes == 1 && first.normalSpikes == 0);
+    assert(std::abs(first.historicalPeakEvent.block - 30.f) < .001f);
+    assert(std::abs(first.historicalPeakEvent.params - 12.f) < .001f);
+    assert(first.historicalPeakEvent.guardToggle);
+    assert(std::abs(first.historicalPeakEvent.params + first.historicalPeakEvent.input
+                    + first.historicalPeakEvent.ab + first.historicalPeakEvent.rider
+                    + first.historicalPeakEvent.output - first.historicalPeakEvent.block) < .001f);
+    // Event B is a smaller normal callback above threshold, updates last spike only.
+    t.record(.002, 480, 48000, 101, 10., false,
+             .0005, .001, .0005, 0., .0004, .0004, .0002, true);
+    published.publish(t);
+    auto second = published.read();
+    assert(second.spikes == 2 && second.toggleSpikes == 1 && second.normalSpikes == 1);
+    assert(std::abs(second.historicalPeakEvent.block - 30.f) < .001f);
+    assert(std::abs(second.lastSpikeEvent.block - 20.f) < .001f);
+    assert(!second.lastSpikeEvent.guardToggle && second.lastSpikeEvent.abEngineRunning);
+    // Smaller non-spike does not overwrite event snapshots.
+    t.record(.0002, 480, 48000, 102, 10., false);
+    published.publish(t);
+    assert(published.read().lastSpikeEvent.block == second.lastSpikeEvent.block);
+    t.reset(); published.publish(t);
+    const auto cleared = published.read();
+    assert(cleared.spikes == 0 && cleared.toggleSpikes == 0 && cleared.normalSpikes == 0);
+    assert(cleared.historicalPeakEvent.block == 0 && cleared.lastSpikeEvent.block == 0);
+}
 int main() {
+    testSpikeEventSnapshots();
     smoothride::PerformanceTelemetry t;
     t.record(0.0001, 480, 48000); // 100 us out of 10 ms = 1%
     assert(std::abs(t.averagePercent() - 1.f) < 0.0001f);

@@ -232,6 +232,10 @@ void SmoothRideAudioProcessorEditor::timerCallback() {
     displayedToggleParamsMean = dsp.toggleParamsMeanPercent;
     displayedToggleParamsMax = dsp.toggleParamsMaxPercent;
     displayedResetUs = dsp.resetMicroseconds;
+    displayedPeakEvent = dsp.historicalPeakEvent;
+    displayedSpikeEvent = dsp.lastSpikeEvent;
+    displayedToggleSpikes = dsp.toggleSpikes;
+    displayedNormalSpikes = dsp.normalSpikes;
     displayedABRunning = dsp.lastToggleABRunning;
     comparisonInfo.setText("Output RMS " + juce::String(processor.getRecentOutputRmsDb(), 1)
        + " dBFS   |   Match " + juce::String(processor.getABMatchingDb(), 1) + " dB"
@@ -302,7 +306,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawText("SMOOTHRIDE", margin, 8, 245, 35, juce::Justification::centredLeft);
     g.setColour(accent);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
-    g.drawText("v0.6.8  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
+    g.drawText("v0.6.9  |  GAIN RIDER", 878, 10, right-878, 30, juce::Justification::centredRight);
     g.setColour(faint);
     g.setFont(juce::Font(juce::FontOptions(12.0f)));
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
@@ -395,7 +399,7 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
         g.drawText(label, x, 205, columnWidth, 17, juce::Justification::centredLeft);
         g.setColour(valueColour);
         g.setFont(juce::Font(juce::FontOptions(16.0f).withStyle("bold")));
-        g.drawText(value, x, 227, columnWidth, 27, juce::Justification::centredLeft);
+        g.drawText(value, x, 224, columnWidth, 22, juce::Justification::centredLeft);
     };
     drawDiagnostic(0, "DETECTOR / BLOCK RMS", juce::String(displayedRmsDb, 1) + " / "
                    + juce::String(displayedBlockRmsDb, 1) + " dBFS", text);
@@ -414,6 +418,27 @@ void SmoothRideAudioProcessorEditor::paint(juce::Graphics& g) {
     drawDiagnostic(2, "RIDER STATUS / " + detail,
         processor.getNoiseBlocked() ? "NOISE BLOCKED" : status,
         displayedActive ? accent : faint);
+
+    // Both records refer to individual callbacks, not the latest Noise Guard toggle.
+    // 'T' means the same callback that changed Noise Guard; 'N' means other callback.
+    const auto eventLine = [](const juce::String& title, const smoothride::SpikeEvent& e) {
+        return title + " " + juce::String(e.block, 1) + "% "
+            + (e.guardToggle ? "T" : "N")
+            + "  P " + juce::String(e.params, 1)
+            + " I " + juce::String(e.input, 1)
+            + " AB " + juce::String(e.ab, 1)
+            + (e.abEngineRunning ? "*" : "")
+            + " R " + juce::String(e.rider, 1)
+            + " O " + juce::String(e.output, 1) + "%";
+    };
+    g.setColour(faint);
+    g.setFont(juce::Font(juce::FontOptions(9.0f)));
+    g.drawText(eventLine("PEAK", displayedPeakEvent), 32, 247, 700, 11,
+               juce::Justification::centredLeft);
+    g.drawText(eventLine("SPIKE", displayedSpikeEvent)
+               + "   COUNTS T:" + juce::String(static_cast<juce::int64>(displayedToggleSpikes))
+               + " N:" + juce::String(static_cast<juce::int64>(displayedNormalSpikes)),
+               32, 257, 900, 11, juce::Justification::centredLeft);
 
     // Compact cards leave two rows for user presets and A/B snapshots.
     constexpr int cols = 4, cardY = 272, cardGap = 6, cardH = 66;
