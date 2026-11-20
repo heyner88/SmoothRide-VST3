@@ -52,6 +52,8 @@ def percentile(values, pct):
     i = (len(ordered) - 1) * pct / 100
     lo = int(math.floor(i))
     hi = int(math.ceil(i))
+    if lo == hi:
+        return ordered[lo]
     return ordered[lo] * (hi - i) + ordered[hi] * (i - lo)
 
 def summarize(rows, name):
